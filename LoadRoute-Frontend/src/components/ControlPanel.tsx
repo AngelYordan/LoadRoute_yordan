@@ -49,6 +49,12 @@ const FILE_CONFIGS = [
   { key: 'envios', label: 'Envíos', desc: '_envios_XXXX_.txt', icon: '📦', accept: '.txt' },
 ];
 
+const ALGORITMOS_ESCENARIO_2 = [
+  { id: 'ambos', titulo: 'Comparacion', descripcion: 'Ejecuta SA y ALNS para comparar resultados.' },
+  { id: 'sa', titulo: 'Solo SA', descripcion: 'Ejecuta unicamente Simulated Annealing.' },
+  { id: 'alns', titulo: 'Solo ALNS', descripcion: 'Ejecuta ALNS sin panel comparativo.' },
+] as const;
+
 /** Convierte 'YYYY-MM-DD' (HTML date input) a 'YYYYMMDD' (backend) */
 function toBackendDate(htmlDate: string): string {
   return htmlDate.replace(/-/g, '');
@@ -61,6 +67,7 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
     envios: { files: [], name: '' },
   });
   const [escenario, setEscenario] = useState(1);
+  const [algoritmo, setAlgoritmo] = useState<'ambos' | 'sa' | 'alns'>('ambos');
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
   const [ejecutando, setEjecutando] = useState(false);
@@ -102,6 +109,7 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
         archivos.vuelos.files[0],
         archivos.envios.files,
         escenario,
+        escenario === 2 ? algoritmo : 'ambos',
         fechaInicio ? toBackendDate(fechaInicio) : undefined,
         fechaFin    ? toBackendDate(fechaFin)    : undefined,
         setProgreso,
@@ -244,6 +252,34 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
       </div>
 
       {/* Botón Ejecutar */}
+      {escenario === 2 && (
+        <div>
+          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
+            Algoritmo
+          </h3>
+          <div className="grid grid-cols-3 gap-2">
+            {ALGORITMOS_ESCENARIO_2.map(op => {
+              const isActive = algoritmo === op.id;
+              return (
+                <button
+                  key={op.id}
+                  type="button"
+                  onClick={() => setAlgoritmo(op.id)}
+                  title={op.descripcion}
+                  className={`rounded-lg border px-3 py-2 text-center transition-all
+                    ${isActive
+                      ? 'border-emerald-400 bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-400/30'
+                      : 'border-slate-700 bg-slate-800/50 text-slate-400 hover:border-slate-500 hover:text-slate-200'
+                    }`}
+                >
+                  <span className="block text-xs font-semibold">{op.titulo}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <button
         onClick={handleEjecutar}
         disabled={!todosArchivosListos || ejecutando}

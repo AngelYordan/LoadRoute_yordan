@@ -16,7 +16,6 @@ export default function ModalAeropuerto({ aeropuerto, rutasActivas, simTiempoMin
     for (const r of rutasActivas) {
       if (!r.tramos || r.tramos.length === 0) continue;
       const firstFlight = r.tramos[0];
-      const lastFlight = r.tramos[r.tramos.length - 1];
 
       if (aeropuerto.codigo === r.origen) {
          if (simTiempoMinutos <= firstFlight.salidaMinutosGMT) {

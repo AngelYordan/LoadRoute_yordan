@@ -78,6 +78,7 @@ public class RutasController {
             @RequestPart("vuelosFile")      MultipartFile vuelosFile,
             @RequestPart("enviosFiles")     List<MultipartFile> enviosFiles,
             @RequestParam(value = "escenario",   defaultValue = "1") int escenario,
+            @RequestParam(value = "algoritmo",   defaultValue = "ambos") String algoritmo,
             @RequestParam(value = "fechaInicio", required = false)    String fechaInicio,
             @RequestParam(value = "fechaFin",    required = false)    String fechaFin
     ) throws IOException {
@@ -87,6 +88,7 @@ public class RutasController {
                 vuelosFile.getInputStream(),
                 enviosFiles,
                 escenario,
+                algoritmo,
                 fechaInicio,
                 fechaFin
         );
@@ -100,6 +102,7 @@ public class RutasController {
             @RequestPart("vuelosFile")      MultipartFile vuelosFile,
             @RequestPart("enviosFiles")     List<MultipartFile> enviosFiles,
             @RequestParam(value = "escenario",   defaultValue = "1") int escenario,
+            @RequestParam(value = "algoritmo",   defaultValue = "ambos") String algoritmo,
             @RequestParam(value = "fechaInicio", required = false)    String fechaInicio,
             @RequestParam(value = "fechaFin",    required = false)    String fechaFin
     ) throws IOException {
@@ -108,6 +111,7 @@ public class RutasController {
                 vuelosFile,
                 enviosFiles,
                 escenario,
+                algoritmo,
                 fechaInicio,
                 fechaFin
         ));

@@ -1,10 +1,14 @@
 import React, { useState } from 'react';
 import { RutaMuestra, AeropuertoDTO } from '@/types/rutas';
+import { getAirportCurrentLoad } from '@/utils/simulationLoads';
 
 interface SidebarInfoProps {
   envios: RutaMuestra[];
   aeropuertos: AeropuertoDTO[];
   activeTab: 'pedidos' | 'aeropuertos' | 'simulacion' | null;
+  simTiempoMinutos?: number;
+  simDia?: number;
+  showAirportLoads?: boolean;
   onSelectEnvio: (e: RutaMuestra) => void;
   onSelectAeropuerto: (a: AeropuertoDTO) => void;
 }
@@ -13,6 +17,9 @@ export default function SidebarInfo({
   envios,
   aeropuertos,
   activeTab,
+  simTiempoMinutos = 0,
+  simDia = 0,
+  showAirportLoads = false,
   onSelectEnvio,
   onSelectAeropuerto,
 }: SidebarInfoProps) {
@@ -121,7 +128,15 @@ export default function SidebarInfo({
           {filteredAero.length === 0 ? (
             <p className="text-center text-slate-600 text-xs pt-8">Sin resultados</p>
           ) : (
-            filteredAero.map(a => (
+            filteredAero.map(a => {
+              const cargaActual = showAirportLoads
+                ? getAirportCurrentLoad(a.codigo, envios, simTiempoMinutos, simDia)
+                : null;
+              const porcentaje = cargaActual !== null && a.capacidadMax > 0
+                ? Math.round((cargaActual / a.capacidadMax) * 100)
+                : 0;
+
+              return (
               <div
                 key={a.codigo}
                 onClick={() => onSelectAeropuerto(a)}
@@ -138,8 +153,17 @@ export default function SidebarInfo({
                   <span className="mx-1.5 text-slate-700">|</span>
                   GMT{a.gmt >= 0 ? '+' : ''}{a.gmt}
                 </p>
+                {showAirportLoads && (
+                  <div className="mt-2 flex items-center justify-between rounded-md border border-cyan-500/25 bg-cyan-500/10 px-2 py-1">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-cyan-400">Maletas ahora</span>
+                    <span className="font-mono text-xs font-bold text-cyan-200">
+                      {cargaActual} ({porcentaje}%)
+                    </span>
+                  </div>
+                )}
               </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>

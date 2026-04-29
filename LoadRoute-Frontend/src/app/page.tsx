@@ -10,6 +10,7 @@ import ModalVuelo from '@/components/ModalVuelo';
 import ResultadosPanel from '@/components/ResultadosPanel';
 import { RutaResponse, RutaMuestra, AeropuertoDTO, TramoDTO } from '@/types/rutas';
 import { verificarSaludBackend } from '@/services/ruteoService';
+import { getRoutesForMode } from '@/utils/simulationLoads';
 
 const MapaRutas = dynamic(() => import('@/components/MapaRutas'), {
   ssr: false,
@@ -301,6 +302,7 @@ export default function Home() {
               setSimDia(0);
               setFechaInicioRaw(res.fechaInicio || fechaInicioRaw);
               setFechaFinRaw(res.fechaFin || '');
+              setModoMapa(res.resultadoSA && res.resultadoALNS ? 'alns' : res.resultadoALNS ? 'alns' : 'sa');
               setIsPlaying(true);
             }}
             onError={setError}
@@ -335,7 +337,11 @@ export default function Home() {
   // ══════════════════════════════════════════════
   // VISTA DASHBOARD
   // ══════════════════════════════════════════════
-  const rutasActivas = resultado?.resultadoALNS?.rutasMuestra || resultado?.resultadoSA?.rutasMuestra || [];
+  const rutasActivas = getRoutesForMode(
+    modoMapa,
+    resultado?.resultadoSA?.rutasMuestra || [],
+    resultado?.resultadoALNS?.rutasMuestra || []
+  );
 
   return (
     <div className="h-screen bg-[#0a1628] flex flex-col overflow-hidden text-slate-200">
@@ -418,6 +424,9 @@ export default function Home() {
                   envios={rutasActivas}
                   aeropuertos={resultado.aeropuertos}
                   activeTab={activeTab}
+                  simTiempoMinutos={simTiempoMinutos}
+                  simDia={simDia}
+                  showAirportLoads={resultado.escenario === 2}
                   onSelectEnvio={setEnvioModal}
                   onSelectAeropuerto={setAeroModal}
                 />
@@ -450,6 +459,7 @@ export default function Home() {
             <MapaRutas
               resultado={resultado}
               simTiempoMinutos={simTiempoMinutos}
+              simDia={simDia}
               onSelectVuelo={setVueloModal}
               selectedVuelo={vueloModal}
               umbralVerde={umbralVerde}

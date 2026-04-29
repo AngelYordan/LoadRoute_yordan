@@ -31,6 +31,7 @@ public class RuteoAsyncJobService {
                                     MultipartFile vuelosFile,
                                     List<MultipartFile> enviosFiles,
                                     int escenario,
+                                    String algoritmo,
                                     String fechaInicio,
                                     String fechaFin) throws IOException {
         String jobId = UUID.randomUUID().toString();
@@ -57,6 +58,7 @@ public class RuteoAsyncJobService {
                         new ByteArrayInputStream(vuelosBytes),
                         enviosBytes,
                         escenario,
+                        algoritmo,
                         fechaInicio,
                         fechaFin,
                         (progress, message) -> update(jobId, "RUNNING", progress, message)

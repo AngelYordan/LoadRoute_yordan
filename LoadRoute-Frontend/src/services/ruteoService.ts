@@ -18,6 +18,7 @@ export async function ejecutarSimulacion(
   vuelosFile: File,
   enviosFiles: File[],
   escenario: number,
+  algoritmo: string = 'ambos',
   fechaInicio?: string,  // formato YYYYMMDD, opcional
   fechaFin?: string,     // formato YYYYMMDD, opcional
   onProgress?: (job: SimulacionJob) => void
@@ -27,6 +28,7 @@ export async function ejecutarSimulacion(
     vuelosFile,
     enviosFiles,
     escenario,
+    algoritmo,
     fechaInicio,
     fechaFin
   );
@@ -40,6 +42,7 @@ export async function iniciarSimulacion(
   vuelosFile: File,
   enviosFiles: File[],
   escenario: number,
+  algoritmo: string = 'ambos',
   fechaInicio?: string,
   fechaFin?: string
 ): Promise<SimulacionJob> {
@@ -53,6 +56,7 @@ export async function iniciarSimulacion(
 
   // Los @RequestParam van en la URL, no en el body multipart
   const params = new URLSearchParams({ escenario: String(escenario) });
+  params.set('algoritmo', algoritmo);
   if (fechaInicio) params.set('fechaInicio', fechaInicio);
   if (fechaFin)    params.set('fechaFin', fechaFin);
 

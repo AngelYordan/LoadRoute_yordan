@@ -74,13 +74,24 @@ public class RuteoAlgoritmoService {
                                           int escenario,
                                           String fechaInicio,
                                           String fechaFin) throws IOException {
-        return ejecutarRuteo(aeropuertosIS, vuelosIS, enviosFiles, escenario, fechaInicio, fechaFin, null);
+        return ejecutarRuteo(aeropuertosIS, vuelosIS, enviosFiles, escenario, "ambos", fechaInicio, fechaFin, null);
     }
 
     public RutaResponseDTO ejecutarRuteo(InputStream aeropuertosIS,
                                           InputStream vuelosIS,
                                           List<MultipartFile> enviosFiles,
                                           int escenario,
+                                          String algoritmo,
+                                          String fechaInicio,
+                                          String fechaFin) throws IOException {
+        return ejecutarRuteo(aeropuertosIS, vuelosIS, enviosFiles, escenario, algoritmo, fechaInicio, fechaFin, null);
+    }
+
+    public RutaResponseDTO ejecutarRuteo(InputStream aeropuertosIS,
+                                          InputStream vuelosIS,
+                                          List<MultipartFile> enviosFiles,
+                                          int escenario,
+                                          String algoritmo,
                                           String fechaInicio,
                                           String fechaFin,
                                           ProgressReporter progress) throws IOException {
@@ -140,7 +151,7 @@ public class RuteoAlgoritmoService {
         // ── 6. Ejecutar escenario ─────────────────────────────────────────────
         switch (escenario) {
             case 1 -> ejecutarEscenario1(envios, red, response, progress);
-            case 2 -> ejecutarEscenario2(envios, red, response, progress);
+            case 2 -> ejecutarEscenario2(envios, red, response, progress, algoritmo);
             case 3 -> ejecutarEscenario3(envios, vuelos, red, response, progress);
             default -> ejecutarEscenario1(envios, red, response, progress);
         }
@@ -255,9 +266,17 @@ public class RuteoAlgoritmoService {
     }
 
     private void ejecutarEscenario2(Map<String, Envio> envios, RedLogistica red,
-                                    RutaResponseDTO response, ProgressReporter progress) {
+                                    RutaResponseDTO response, ProgressReporter progress,
+                                    String algoritmo) {
         int envioCount = envios.size();
         long tiempoMin = Math.min(45L, Math.max(1L, envioCount / 150L));
+        String modo = algoritmo == null ? "ambos" : algoritmo.trim().toLowerCase(Locale.ROOT);
+        boolean ejecutarSA = modo.equals("sa") || modo.equals("ambos");
+        boolean ejecutarALNS = modo.equals("alns") || modo.equals("ambos");
+        if (!ejecutarSA && !ejecutarALNS) {
+            ejecutarSA = true;
+            ejecutarALNS = true;
+        }
 
         SimulatedAnnealing sa = new SimulatedAnnealing(red)
                 .setTemperaturaInicial(1_000.0)
@@ -265,15 +284,26 @@ public class RuteoAlgoritmoService {
                 .setTemperaturaMinima(0.1)
                 .setTiempoMaxMinutos(tiempoMin);
 
-        report(progress, 42, "Ejecutando Simulated Annealing...");
-        long t0 = System.currentTimeMillis();
-        SolucionEstado solSA = sa.optimizar(envios);
-        long msSA = System.currentTimeMillis() - t0;
-        report(progress, 68, "SA completado. Ejecutando ALNS...");
+        SolucionEstado solBaseParaALNS = null;
+        if (ejecutarSA) {
+            report(progress, 42, "Ejecutando Simulated Annealing...");
+            long t0 = System.currentTimeMillis();
+            SolucionEstado solSA = sa.optimizar(envios);
+            long msSA = System.currentTimeMillis() - t0;
+            solBaseParaALNS = solSA.clonar();
+            report(progress, ejecutarALNS ? 68 : 92, ejecutarALNS ? "SA completado. Ejecutando ALNS..." : "SA completado.");
 
-        response.setResultadoSA(buildResultado("Simulated Annealing",
-                sa.getCostoInicial(), sa.getCostoFinal(),
-                sa.getMejoraRelativa(), sa.getIteraciones(), msSA, solSA, envios));
+            response.setResultadoSA(buildResultado("Simulated Annealing",
+                    sa.getCostoInicial(), sa.getCostoFinal(),
+                    sa.getMejoraRelativa(), sa.getIteraciones(), msSA, solSA, envios));
+        }
+
+        if (!ejecutarALNS) return;
+
+        if (solBaseParaALNS == null) {
+            report(progress, 42, "Construyendo solucion inicial para ALNS...");
+            solBaseParaALNS = construirGreedyInicial(envios, red);
+        }
 
         ALNS alns = new ALNS(red)
                 .setMaxIteraciones(500)
@@ -281,14 +311,28 @@ public class RuteoAlgoritmoService {
                 .setTemperaturaInicial(200.0)
                 .setTiempoMaxMinutos(tiempoMin);
 
+        report(progress, ejecutarSA ? 68 : 50, "Ejecutando ALNS...");
         long t1 = System.currentTimeMillis();
-        SolucionEstado solALNS = alns.optimizar(envios, solSA.clonar());
+        SolucionEstado solALNS = alns.optimizar(envios, solBaseParaALNS);
         long msALNS = System.currentTimeMillis() - t1;
         report(progress, 92, "ALNS completado.");
 
         response.setResultadoALNS(buildResultado("ALNS",
                 alns.getCostoInicial(), alns.getCostoFinal(),
                 alns.getMejoraRelativa(), alns.getIteraciones(), msALNS, solALNS, envios));
+    }
+
+    private SolucionEstado construirGreedyInicial(Map<String, Envio> envios, RedLogistica red) {
+        SolucionEstado sol = new SolucionEstado(envios);
+        for (Envio envio : envios.values()) {
+            List<List<Vuelo>> rutas = red.buscarRutas(envio, true);
+            if (rutas.isEmpty()) rutas = red.buscarRutasRelajadas(envio);
+            if (!rutas.isEmpty()) {
+                sol.asignarRuta(envio.getId(), rutas.get(0));
+                for (Vuelo v : rutas.get(0)) v.reservar(envio.getCantidadMaletas());
+            }
+        }
+        return sol;
     }
 
     private void ejecutarEscenario3(Map<String, Envio> envios, List<Vuelo> todosVuelos,
