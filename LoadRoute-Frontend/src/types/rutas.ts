@@ -45,6 +45,7 @@ export interface ResultadoAlgoritmo {
   iteraciones: number;
   tiempoEjecucionMs: number;
   enviosAsignados: number;
+  enviosRechazados: number;
   totalEnvios: number;
   rutasMuestra: RutaMuestra[];
   mensajeColapso?: string;

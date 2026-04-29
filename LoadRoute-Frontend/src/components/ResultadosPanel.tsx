@@ -27,11 +27,13 @@ function MetricCard({
   value,
   sub,
   color,
+  className = '',
 }: {
   label: string;
   value: string;
   sub?: string;
   color: string;
+  className?: string;
 }) {
   const colorClasses: Record<string, string> = {
     blue: 'border-blue-500/30 text-blue-400',
@@ -43,9 +45,11 @@ function MetricCard({
   };
 
   return (
-    <div className={`rounded-lg border bg-slate-800/40 p-3 ${colorClasses[color]}`}>
+    <div className={`rounded-lg border bg-slate-800/40 p-3 min-w-0 ${colorClasses[color]} ${className}`}>
       <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">{label}</p>
-      <p className={`text-lg font-bold ${colorClasses[color]?.split(' ')[1]}`}>{value}</p>
+      <p className={`text-base font-bold leading-tight tabular-nums whitespace-nowrap ${colorClasses[color]?.split(' ')[1]}`}>
+        {value}
+      </p>
       {sub && <p className="text-[10px] text-slate-500 mt-0.5">{sub}</p>}
     </div>
   );
@@ -69,24 +73,39 @@ function AlgoritmoBloque({ res, color }: { res: ResultadoAlgoritmo; color: 'blue
         <span className="text-[10px] text-slate-400">{formatTiempo(res.tiempoEjecucionMs)}</span>
       </div>
 
-      <div className="p-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
+      <div className="p-3 grid grid-cols-1 sm:grid-cols-6 gap-2">
         <MetricCard
           label="Costo Inicial"
           value={formatCosto(res.costoInicial)}
           color={color === 'blue' ? 'blue' : 'green'}
+          className="sm:col-span-2"
         />
-        <MetricCard label="Costo Final" value={formatCosto(res.costoFinal)} color="cyan" />
+        <MetricCard
+          label="Costo Final"
+          value={formatCosto(res.costoFinal)}
+          color="cyan"
+          className="sm:col-span-2"
+        />
         <MetricCard
           label="Mejora"
           value={`${res.mejoraRelativa.toFixed(1)}%`}
           sub={`${res.iteraciones.toLocaleString()} iteraciones`}
           color={res.mejoraRelativa > 0 ? 'green' : 'red'}
+          className="sm:col-span-2"
         />
         <MetricCard
           label="Asignados"
           value={`${res.enviosAsignados}/${res.totalEnvios}`}
           sub={`${((res.enviosAsignados / Math.max(res.totalEnvios, 1)) * 100).toFixed(0)}% cobertura`}
           color="amber"
+          className="sm:col-span-3"
+        />
+        <MetricCard
+          label="Rechazados"
+          value={(res.enviosRechazados ?? 0).toLocaleString()}
+          sub="por capacidad"
+          color="red"
+          className="sm:col-span-3"
         />
       </div>
 

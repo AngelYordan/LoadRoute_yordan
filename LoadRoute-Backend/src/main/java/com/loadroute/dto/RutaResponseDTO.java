@@ -87,6 +87,9 @@ public class RutaResponseDTO {
         @JsonProperty("enviosAsignados")
         private int enviosAsignados;
 
+        @JsonProperty("enviosRechazados")
+        private int enviosRechazados;
+
         @JsonProperty("totalEnvios")
         private int totalEnvios;
 
@@ -120,6 +123,9 @@ public class RutaResponseDTO {
 
         public int getEnviosAsignados() { return enviosAsignados; }
         public void setEnviosAsignados(int enviosAsignados) { this.enviosAsignados = enviosAsignados; }
+
+        public int getEnviosRechazados() { return enviosRechazados; }
+        public void setEnviosRechazados(int enviosRechazados) { this.enviosRechazados = enviosRechazados; }
 
         public int getTotalEnvios() { return totalEnvios; }
         public void setTotalEnvios(int totalEnvios) { this.totalEnvios = totalEnvios; }

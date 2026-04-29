@@ -134,26 +134,44 @@ public class RuteoAlgoritmoService {
         }
 
         // ── 4. Construir red logística ────────────────────────────────────────
+        int totalEnviosEnRango = envios.size();
+
         RedLogistica red = new RedLogistica(aeropuertos.values(), vuelos);
         report(progress, 35, "Red logistica construida.");
+
+        AdmisionResultado admision = aplicarControlAdmisionPorCapacidad(envios, red);
+        envios = admision.aceptados;
+        report(progress, 38, String.format(
+                "Control de capacidad aplicado: %d aceptados, %d rechazados.",
+                envios.size(), admision.rechazados));
+        LOG.info(String.format(
+                "Control de admision por capacidad: %d aceptados | %d rechazados | %d en rango",
+                envios.size(), admision.rechazados, totalEnviosEnRango));
 
         // ── 5. Armar respuesta base ───────────────────────────────────────────
         RutaResponseDTO response = new RutaResponseDTO();
         response.setEscenario(escenario);
         response.setTotalVuelos(red.getTotalVuelos());
-        response.setTotalEnviosCargados(envios.size());
+        response.setTotalEnviosCargados(totalEnviosEnRango);
         response.setFechaInicio(fechaInicio);
         response.setFechaFin(fechaFin);
         response.setAeropuertos(
             aeropuertos.values().stream().map(this::mapAeropuertoDTO).collect(Collectors.toList())
         );
 
+        if (envios.isEmpty()) {
+            LOG.warning("Todos los envios del rango fueron rechazados por capacidad de aeropuerto.");
+            llenarResultadosVacios(response, escenario, algoritmo, admision.rechazados);
+            report(progress, 98, "No quedan envios aceptados para rutear.");
+            return response;
+        }
+
         // ── 6. Ejecutar escenario ─────────────────────────────────────────────
         switch (escenario) {
-            case 1 -> ejecutarEscenario1(envios, red, response, progress);
-            case 2 -> ejecutarEscenario2(envios, red, response, progress, algoritmo);
-            case 3 -> ejecutarEscenario3(envios, vuelos, red, response, progress);
-            default -> ejecutarEscenario1(envios, red, response, progress);
+            case 1 -> ejecutarEscenario1(envios, red, response, progress, admision.rechazados);
+            case 2 -> ejecutarEscenario2(envios, red, response, progress, algoritmo, admision.rechazados);
+            case 3 -> ejecutarEscenario3(envios, vuelos, red, response, progress, admision.rechazados);
+            default -> ejecutarEscenario1(envios, red, response, progress, admision.rechazados);
         }
 
         report(progress, 98, "Preparando respuesta para el dashboard...");
@@ -242,8 +260,122 @@ public class RuteoAlgoritmoService {
     // ESCENARIOS
     // ══════════════════════════════════════════════════════════════════════════
 
+    private AdmisionResultado aplicarControlAdmisionPorCapacidad(Map<String, Envio> envios,
+                                                                 RedLogistica red) {
+        Map<String, Envio> aceptados = new LinkedHashMap<>();
+        Map<String, EstadoAeropuerto> estados = new HashMap<>();
+
+        List<Envio> ordenados = envios.values().stream()
+                .sorted(Comparator
+                        .comparing(Envio::getRecepcionGMT)
+                        .thenComparing(Envio::getId))
+                .toList();
+
+        int rechazados = 0;
+        for (Envio envio : ordenados) {
+            String codigoOrigen = envio.getOrigen().getCodigo();
+            EstadoAeropuerto estado = estados.computeIfAbsent(codigoOrigen, k -> new EstadoAeropuerto());
+            LocalDateTime recepcion = envio.getRecepcionGMT();
+            estado.liberarHasta(recepcion);
+
+            int maletas = envio.getCantidadMaletas();
+            if (estado.ocupacion + maletas > envio.getOrigen().getCapacidadMax()) {
+                rechazados++;
+                continue;
+            }
+
+            estado.ocupacion += maletas;
+            LocalDateTime salida = calcularSalidaPrimerVuelo(envio, red);
+            if (salida != null) {
+                estado.salidas.add(new EventoSalida(salida, maletas));
+            }
+            aceptados.put(envio.getId(), envio);
+        }
+
+        return new AdmisionResultado(aceptados, rechazados);
+    }
+
+    private LocalDateTime calcularSalidaPrimerVuelo(Envio envio, RedLogistica red) {
+        List<List<Vuelo>> rutas = red.buscarRutas(envio, true);
+        if (rutas.isEmpty()) rutas = red.buscarRutasRelajadas(envio);
+        if (rutas.isEmpty() || rutas.get(0).isEmpty()) return null;
+        return rutas.get(0).get(0).getProximaSalidaGMT(
+                envio.getRecepcionGMT(), RedLogistica.BUFFER_CONEXION);
+    }
+
+    private void llenarResultadosVacios(RutaResponseDTO response, int escenario,
+                                        String algoritmo, int rechazados) {
+        if (escenario == 2) {
+            String modo = algoritmo == null ? "ambos" : algoritmo.trim().toLowerCase(Locale.ROOT);
+            boolean incluirSA = modo.equals("sa") || modo.equals("ambos");
+            boolean incluirALNS = modo.equals("alns") || modo.equals("ambos");
+            if (!incluirSA && !incluirALNS) {
+                incluirSA = true;
+                incluirALNS = true;
+            }
+            if (incluirSA) response.setResultadoSA(resultadoVacio("Simulated Annealing", rechazados));
+            if (incluirALNS) response.setResultadoALNS(resultadoVacio("ALNS", rechazados));
+            return;
+        }
+        if (escenario == 3) {
+            response.setResultadoSA(resultadoVacio("SA (Dia Normal)", rechazados));
+            response.setResultadoALNS(resultadoVacio("ALNS (Colapso)", rechazados));
+            return;
+        }
+        response.setResultadoSA(resultadoVacio("Simulated Annealing", rechazados));
+    }
+
+    private ResultadoAlgoritmo resultadoVacio(String algoritmo, int rechazados) {
+        ResultadoAlgoritmo r = new ResultadoAlgoritmo();
+        r.setAlgoritmo(algoritmo);
+        r.setCostoInicial(0);
+        r.setCostoFinal(0);
+        r.setMejoraRelativa(0);
+        r.setIteraciones(0);
+        r.setTiempoEjecucionMs(0);
+        r.setEnviosAsignados(0);
+        r.setEnviosRechazados(rechazados);
+        r.setTotalEnvios(0);
+        r.setRutasMuestra(Collections.emptyList());
+        r.setMensajeColapso("");
+        return r;
+    }
+
+    private static class AdmisionResultado {
+        final Map<String, Envio> aceptados;
+        final int rechazados;
+
+        AdmisionResultado(Map<String, Envio> aceptados, int rechazados) {
+            this.aceptados = aceptados;
+            this.rechazados = rechazados;
+        }
+    }
+
+    private static class EstadoAeropuerto {
+        int ocupacion = 0;
+        final PriorityQueue<EventoSalida> salidas = new PriorityQueue<>(
+                Comparator.comparing(ev -> ev.tiempo));
+
+        void liberarHasta(LocalDateTime tiempo) {
+            while (!salidas.isEmpty() && !salidas.peek().tiempo.isAfter(tiempo)) {
+                ocupacion = Math.max(0, ocupacion - salidas.poll().maletas);
+            }
+        }
+    }
+
+    private static class EventoSalida {
+        final LocalDateTime tiempo;
+        final int maletas;
+
+        EventoSalida(LocalDateTime tiempo, int maletas) {
+            this.tiempo = tiempo;
+            this.maletas = maletas;
+        }
+    }
+
     private void ejecutarEscenario1(Map<String, Envio> envios, RedLogistica red,
-                                    RutaResponseDTO response, ProgressReporter progress) {
+                                    RutaResponseDTO response, ProgressReporter progress,
+                                    int enviosRechazados) {
         int envioCount = envios.size();
         // Tiempo proporcional al tamaño: mínimo 1 min, máximo 90 min
         long tiempoMin = Math.min(90L, Math.max(1L, envioCount / 150L));
@@ -262,12 +394,14 @@ public class RuteoAlgoritmoService {
 
         response.setResultadoSA(buildResultado("Simulated Annealing",
                 sa.getCostoInicial(), sa.getCostoFinal(),
-                sa.getMejoraRelativa(), sa.getIteraciones(), ms, sol, envios));
+                sa.getMejoraRelativa(), sa.getIteraciones(), ms, sol, envios,
+                enviosRechazados));
     }
 
     private void ejecutarEscenario2(Map<String, Envio> envios, RedLogistica red,
                                     RutaResponseDTO response, ProgressReporter progress,
-                                    String algoritmo) {
+                                    String algoritmo,
+                                    int enviosRechazados) {
         int envioCount = envios.size();
         long tiempoMin = Math.min(45L, Math.max(1L, envioCount / 150L));
         String modo = algoritmo == null ? "ambos" : algoritmo.trim().toLowerCase(Locale.ROOT);
@@ -295,7 +429,8 @@ public class RuteoAlgoritmoService {
 
             response.setResultadoSA(buildResultado("Simulated Annealing",
                     sa.getCostoInicial(), sa.getCostoFinal(),
-                    sa.getMejoraRelativa(), sa.getIteraciones(), msSA, solSA, envios));
+                    sa.getMejoraRelativa(), sa.getIteraciones(), msSA, solSA, envios,
+                    enviosRechazados));
         }
 
         if (!ejecutarALNS) return;
@@ -319,7 +454,8 @@ public class RuteoAlgoritmoService {
 
         response.setResultadoALNS(buildResultado("ALNS",
                 alns.getCostoInicial(), alns.getCostoFinal(),
-                alns.getMejoraRelativa(), alns.getIteraciones(), msALNS, solALNS, envios));
+                alns.getMejoraRelativa(), alns.getIteraciones(), msALNS, solALNS, envios,
+                enviosRechazados));
     }
 
     private SolucionEstado construirGreedyInicial(Map<String, Envio> envios, RedLogistica red) {
@@ -336,7 +472,8 @@ public class RuteoAlgoritmoService {
     }
 
     private void ejecutarEscenario3(Map<String, Envio> envios, List<Vuelo> todosVuelos,
-                                    RedLogistica red, RutaResponseDTO response, ProgressReporter progress) {
+                                    RedLogistica red, RutaResponseDTO response, ProgressReporter progress,
+                                    int enviosRechazados) {
         int envioCount = envios.size();
         long tiempoMin = Math.min(30L, Math.max(1L, envioCount / 200L));
 
@@ -353,7 +490,8 @@ public class RuteoAlgoritmoService {
 
         response.setResultadoSA(buildResultado("SA (Día Normal)",
                 sa.getCostoInicial(), sa.getCostoFinal(),
-                sa.getMejoraRelativa(), sa.getIteraciones(), msSA, solBase, envios));
+                sa.getMejoraRelativa(), sa.getIteraciones(), msSA, solBase, envios,
+                enviosRechazados));
 
         // Bucle de colapso progresivo
         List<Vuelo> vuelosRestantes = new ArrayList<>(todosVuelos);
@@ -403,7 +541,8 @@ public class RuteoAlgoritmoService {
 
         ResultadoAlgoritmo resColapso = buildResultado("ALNS (Colapso)",
                 alns.getCostoInicial(), alns.getCostoFinal(),
-                alns.getMejoraRelativa(), alns.getIteraciones(), msALNS, solBase, envios);
+                alns.getMejoraRelativa(), alns.getIteraciones(), msALNS, solBase, envios,
+                enviosRechazados);
         resColapso.setMensajeColapso(mensajeColapso);
         response.setResultadoALNS(resColapso);
     }
@@ -416,7 +555,8 @@ public class RuteoAlgoritmoService {
                                                double costoIni, double costoFin,
                                                double mejora, int iter, long ms,
                                                SolucionEstado sol,
-                                               Map<String, Envio> envios) {
+                                               Map<String, Envio> envios,
+                                               int enviosRechazados) {
         ResultadoAlgoritmo r = new ResultadoAlgoritmo();
         r.setAlgoritmo(nombre);
         r.setCostoInicial(costoIni);
@@ -425,6 +565,7 @@ public class RuteoAlgoritmoService {
         r.setIteraciones(iter);
         r.setTiempoEjecucionMs(ms);
         r.setEnviosAsignados(sol.getEnviosAsignados());
+        r.setEnviosRechazados(enviosRechazados);
         r.setTotalEnvios(sol.getTotalEnvios());
         r.setMensajeColapso("");
 
