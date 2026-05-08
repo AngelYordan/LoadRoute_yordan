@@ -5,16 +5,24 @@ interface ModalAeropuertoProps {
   aeropuerto: AeropuertoDTO | null;
   rutasActivas?: RutaMuestra[];
   simTiempoMinutos?: number;
+  cargasAeropuertoOverride?: Record<string, number> | null;
   onClose: () => void;
 }
 
-export default function ModalAeropuerto({ aeropuerto, rutasActivas, simTiempoMinutos, onClose }: ModalAeropuertoProps) {
+export default function ModalAeropuerto({
+  aeropuerto,
+  rutasActivas,
+  simTiempoMinutos,
+  cargasAeropuertoOverride,
+  onClose,
+}: ModalAeropuertoProps) {
   if (!aeropuerto) return null;
 
   // Calculo de carga actual dinámica
-  const cargaActual = rutasActivas && simTiempoMinutos !== undefined
-    ? calcularCargaAeropuertoActual(aeropuerto.codigo, rutasActivas, simTiempoMinutos)
-    : 0;
+  const cargaActual = cargasAeropuertoOverride?.[aeropuerto.codigo]
+    ?? (rutasActivas && simTiempoMinutos !== undefined
+      ? calcularCargaAeropuertoActual(aeropuerto.codigo, rutasActivas, simTiempoMinutos)
+      : 0);
   const porcentaje = Math.min((cargaActual / Math.max(aeropuerto.capacidadMax, 1)) * 100, 100).toFixed(1);
 
   return (

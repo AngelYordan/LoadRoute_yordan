@@ -20,6 +20,7 @@ type ModoMapa = 'sa' | 'alns' | 'ambos';
 interface MapaRutasProps {
   resultado: RutaResponse | null;
   simTiempoMinutos: number;
+  cargasAeropuertoOverride?: Record<string, number> | null;
   onSelectVuelo: (vuelo: any) => void;
   selectedVuelo?: any | null;  // tramo seleccionado — dibuja solo su polilínea
   umbralVerde: number;
@@ -134,6 +135,7 @@ const PlaneMarker: React.FC<{
 export default function MapaRutas({
   resultado,
   simTiempoMinutos,
+  cargasAeropuertoOverride,
   onSelectVuelo,
   selectedVuelo,
   umbralVerde,
@@ -223,7 +225,8 @@ export default function MapaRutas({
             : modoMapa === 'alns'
               ? (resultadoALNS?.rutasMuestra || resultadoSA?.rutasMuestra || [])
               : [...(resultadoSA?.rutasMuestra || []), ...(resultadoALNS?.rutasMuestra || [])];
-              const cargaActual = calcularCargaAeropuertoActual(a.codigo, rutasParaCarga, simTiempoMinutos);
+          const cargaActual = cargasAeropuertoOverride?.[a.codigo]
+            ?? calcularCargaAeropuertoActual(a.codigo, rutasParaCarga, simTiempoMinutos);
           const pct = a.capacidadMax > 0 ? Math.round((cargaActual / a.capacidadMax) * 100) : 0;
           const colorAeropuerto = getAirportColor(cargaActual, a.capacidadMax, umbralVerde, umbralAmbar);
           return (

@@ -7,6 +7,7 @@ interface SidebarInfoProps {
   aeropuertos: AeropuertoDTO[];
   activeTab: 'pedidos' | 'aeropuertos' | 'simulacion' | null;
   simTiempoMinutos?: number;
+  cargasAeropuertoOverride?: Record<string, number> | null;
   onSelectEnvio: (e: RutaMuestra) => void;
   onSelectAeropuerto: (a: AeropuertoDTO) => void;
 }
@@ -16,6 +17,7 @@ export default function SidebarInfo({
   aeropuertos,
   activeTab,
   simTiempoMinutos = 0,
+  cargasAeropuertoOverride,
   onSelectEnvio,
   onSelectAeropuerto,
 }: SidebarInfoProps) {
@@ -43,7 +45,8 @@ export default function SidebarInfo({
   });
 
   const renderAeropuerto = (a: AeropuertoDTO) => {
-    const cargaActual = calcularCargaAeropuertoActual(a.codigo, envios, simTiempoMinutos);
+    const cargaActual = cargasAeropuertoOverride?.[a.codigo]
+      ?? calcularCargaAeropuertoActual(a.codigo, envios, simTiempoMinutos);
     const porcentaje = porcentajeOcupacion(cargaActual, a.capacidadMax);
     const colorCarga =
       cargaActual > a.capacidadMax

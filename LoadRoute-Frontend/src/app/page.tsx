@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import ControlPanel from '@/components/ControlPanel';
 import SidebarInfo from '@/components/SidebarInfo';
@@ -11,6 +11,7 @@ import ResultadosPanel from '@/components/ResultadosPanel';
 import SidebarVuelos from '@/components/SidebarVuelos';
 import { RutaResponse, RutaMuestra, AeropuertoDTO, TramoDTO } from '@/types/rutas';
 import { verificarSaludBackend } from '@/services/ruteoService';
+import { calcularUltimasCargasAeropuertos } from '@/utils/capacidad';
 
 const MapaRutas = dynamic(() => import('@/components/MapaRutas'), {
   ssr: false,
@@ -286,6 +287,25 @@ export default function Home() {
   const simTotalVisual    = rangoFinalizado && maxTotalMinutos !== null
     ? Math.max(0, maxTotalMinutos - (1 / 60))
     : simTotalMinutos;
+  const rutasActivas = useMemo(
+    () => resultado?.resultadoALNS?.rutasMuestra || resultado?.resultadoSA?.rutasMuestra || [],
+    [resultado?.resultadoALNS?.rutasMuestra, resultado?.resultadoSA?.rutasMuestra]
+  );
+  const rutasParaCargaFinal = useMemo(() => {
+    if (!resultado) return [];
+    if (modoMapa === 'sa') return resultado.resultadoSA?.rutasMuestra || [];
+    if (modoMapa === 'ambos') {
+      return [
+        ...(resultado.resultadoSA?.rutasMuestra || []),
+        ...(resultado.resultadoALNS?.rutasMuestra || []),
+      ];
+    }
+    return resultado.resultadoALNS?.rutasMuestra || resultado.resultadoSA?.rutasMuestra || [];
+  }, [resultado, modoMapa]);
+  const cargasAeropuertoFinales = useMemo(
+    () => rangoFinalizado ? calcularUltimasCargasAeropuertos(rutasParaCargaFinal) : null,
+    [rangoFinalizado, rutasParaCargaFinal]
+  );
 
   // Derivados del contador visual: al finalizar conserva la última ocupación del rango
   const simDia           = Math.floor(simTotalVisual / 1440);
@@ -434,8 +454,6 @@ export default function Home() {
   // ══════════════════════════════════════════════
   // VISTA DASHBOARD
   // ══════════════════════════════════════════════
-  const rutasActivas = resultado?.resultadoALNS?.rutasMuestra || resultado?.resultadoSA?.rutasMuestra || [];
-
   return (
     <div className="h-screen bg-[#0a1628] flex flex-col overflow-hidden text-slate-200">
 
@@ -495,6 +513,7 @@ export default function Home() {
           <MapaRutas
             resultado={resultado}
             simTiempoMinutos={simTotalVisual}
+            cargasAeropuertoOverride={cargasAeropuertoFinales}
             onSelectVuelo={setVueloModal}
             selectedVuelo={vueloModal}
             umbralVerde={umbralVerde}
@@ -530,6 +549,7 @@ export default function Home() {
                     aeropuertos={resultado.aeropuertos}
                     activeTab={activeTab}
                     simTiempoMinutos={simTotalVisual}
+                    cargasAeropuertoOverride={cargasAeropuertoFinales}
                     onSelectEnvio={setEnvioModal}
                     onSelectAeropuerto={setAeroModal}
                   />
@@ -614,6 +634,7 @@ export default function Home() {
         aeropuerto={aeroModal}
         rutasActivas={rutasActivas}
         simTiempoMinutos={simTotalVisual}
+        cargasAeropuertoOverride={cargasAeropuertoFinales}
         onClose={() => setAeroModal(null)}
       />
       <ModalVuelo
