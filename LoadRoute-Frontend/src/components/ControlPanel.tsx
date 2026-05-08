@@ -21,8 +21,8 @@ const ESCENARIOS = [
   {
     id: 1,
     titulo: 'Simulación de Periodo',
-    subtitulo: 'Sin interrupciones — SA vs ALNS',
-    descripcion: 'Simulación completa del periodo sin cancelaciones. SA y ALNS compiten en condiciones ideales para establecer el baseline de rendimiento.',
+    subtitulo: 'Lotes de 5 min — SA vs ALNS',
+    descripcion: 'Simulación completa del periodo sin cancelaciones. Los envíos ingresan cronológicamente en ventanas de 5 minutos y SA/ALNS deciden cuáles son aceptados.',
     icono: '📊',
     color: 'cyan',
   },

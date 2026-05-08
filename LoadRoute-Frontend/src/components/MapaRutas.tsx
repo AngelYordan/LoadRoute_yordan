@@ -90,9 +90,6 @@ export default function MapaRutas({
   const tramosSA = resultadoSA?.rutasMuestra?.flatMap(r => r.tramos) || [];
   const tramosALNS = resultadoALNS?.rutasMuestra?.flatMap(r => r.tramos) || [];
 
-  const uniqueTramosLineasSA = deduplicarTramosLineas(tramosSA);
-  const uniqueTramosLineasALNS = deduplicarTramosLineas(tramosALNS);
-
   const activePlanesSA = getActiveFlights(tramosSA, simTiempoMinutos);
   const activePlanesALNS = getActiveFlights(tramosALNS, simTiempoMinutos);
 
@@ -222,16 +219,6 @@ export default function MapaRutas({
 }
 
 // ========================== UTILS ========================== 
-
-function deduplicarTramosLineas(tramos: any[]) {
-  const seen = new Set<string>();
-  return tramos.filter(t => {
-    const key = `${t.origen}-${t.destino}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
 
 function isFlying(t: any, simTotalMinutos: number) {
   if (t.llegadaMinutosGMT === undefined || t.salidaMinutosGMT === undefined || t.diaOffset === undefined) return false;
