@@ -81,6 +81,7 @@ function combineChunks(chunks: RutaResponse[] | undefined): RutaResponse | null 
   const base = { ...chunks[0] };
   base.resultadoSA = base.resultadoSA ? { ...base.resultadoSA, rutasMuestra: [...base.resultadoSA.rutasMuestra] } : null;
   base.resultadoALNS = base.resultadoALNS ? { ...base.resultadoALNS, rutasMuestra: [...base.resultadoALNS.rutasMuestra] } : null;
+  base.totalEnviosCargados = chunks.reduce((total, c) => total + (c.totalEnviosCargados || 0), 0);
   
   base.cancelacionesPorDiaSA = [];
   base.cancelacionesPorDiaALNS = [];
@@ -99,6 +100,7 @@ function combineChunks(chunks: RutaResponse[] | undefined): RutaResponse | null 
     if (i === 0) continue; // Las métricas del primer chunk ya están en `base`
 
     base.fechaFin = c.fechaFin;
+    base.loteFin = c.loteFin || base.loteFin;
     // Agregamos las métricas acumuladas
     if (base.resultadoSA && c.resultadoSA) {
       base.resultadoSA.costoInicial += c.resultadoSA.costoInicial;

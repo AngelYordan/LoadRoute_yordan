@@ -66,6 +66,8 @@ export interface RutaResponse {
   totalEnviosCargados: number;
   fechaInicio?: string;
   fechaFin?: string;
+  loteInicio?: string;
+  loteFin?: string;
   
   // Custom frontend arrays mapped from chunks
   cancelacionesPorDiaSA?: number[][];
