@@ -71,6 +71,26 @@ function getDiasRango(fechaInicioRaw?: string, fechaFinRaw?: string): number | n
   return Math.floor((fin.getTime() - inicio.getTime()) / MS_POR_DIA);
 }
 
+function getTimelineMaxMinutos(resultado: RutaResponse | null): number | null {
+  if (!resultado) return null;
+  const rutas = [
+    ...(resultado.resultadoSA?.rutasMuestra || []),
+    ...(resultado.resultadoALNS?.rutasMuestra || []),
+  ];
+
+  let max = 0;
+  for (const ruta of rutas) {
+    for (const tramo of ruta.tramos || []) {
+      if (tramo.diaOffset === undefined || tramo.llegadaMinutosGMT === undefined) continue;
+      let llegada = tramo.diaOffset * 1440 + tramo.llegadaMinutosGMT;
+      if (tramo.llegadaMinutosGMT < tramo.salidaMinutosGMT) llegada += 1440;
+      max = Math.max(max, llegada);
+    }
+  }
+
+  return max > 0 ? max : null;
+}
+
 function formatoHora(minutos: number): string {
   const h = Math.floor(minutos / 60) % 24;
   const mn = Math.floor(minutos % 60);
@@ -269,6 +289,7 @@ export default function Home() {
   const [isPlaying,        setIsPlaying]        = useState(false);
   const [fechaInicioRaw,   setFechaInicioRaw]   = useState(''); // YYYYMMDD
   const [fechaFinRaw,      setFechaFinRaw]      = useState(''); // YYYYMMDD
+  const [duracionAnimacionMinutos, setDuracionAnimacionMinutos] = useState(60);
   const timerRef = useRef<number | null>(null);
   const lastFrameRef = useRef<number | null>(null);
 
@@ -281,8 +302,12 @@ export default function Home() {
   const [umbralVerde, setUmbralVerde] = useState(30);
   const [umbralAmbar, setUmbralAmbar] = useState(70);
   const maxSimDia = getDiasRango(fechaInicioRaw, fechaFinRaw);
+  const maxTimelineMinutos = useMemo(() => getTimelineMaxMinutos(resultado), [resultado]);
   // El limite total es (maxSimDia + 1) días completos; +1 para que el último día se complete
-  const maxTotalMinutos   = maxSimDia !== null ? (maxSimDia + 1) * 1440 : null;
+  const maxTotalMinutos   = maxSimDia !== null ? (maxSimDia + 1) * 1440 : maxTimelineMinutos;
+  const avanceMinutosPorSegundo = maxTotalMinutos !== null
+    ? maxTotalMinutos / Math.max(1, duracionAnimacionMinutos * 60)
+    : 60;
   const rangoFinalizado   = maxTotalMinutos !== null && simTotalMinutos >= maxTotalMinutos;
   const simTotalVisual    = rangoFinalizado && maxTotalMinutos !== null
     ? Math.max(0, maxTotalMinutos - (1 / 60))
@@ -333,7 +358,7 @@ export default function Home() {
 
       let continuar = true;
       setSimTotalMinutos(prev => {
-        const next = prev + (deltaMs / 1000) * 60;
+        const next = prev + (deltaMs / 1000) * avanceMinutosPorSegundo;
         if (maxTotalMinutos !== null && next >= maxTotalMinutos) {
           continuar = false;
           setIsPlaying(false);
@@ -354,7 +379,7 @@ export default function Home() {
       timerRef.current = null;
       lastFrameRef.current = null;
     };
-  }, [isPlaying, maxTotalMinutos]);
+  }, [isPlaying, maxTotalMinutos, avanceMinutosPorSegundo]);
 
   const handleReiniciar = () => {
     setResultado(null);
@@ -404,6 +429,7 @@ export default function Home() {
                 setSimTotalMinutos(0);
                 // fechaInicioRaw ya fue seteado por onFechaInicio antes de ejecutar
                 // res.fechaFin es el último chunk en YYYYMMDD
+                setFechaInicioRaw(prev => prev || res.fechaInicio || '');
                 setFechaFinRaw(res.fechaFin || '');
                 setIsPlaying(true);
               }
@@ -414,10 +440,12 @@ export default function Home() {
                 if (!resultado) {
                   setResultado(res);
                   setSimTotalMinutos(0);
-                  setIsPlaying(true);
+                  setFechaInicioRaw(prev => prev || res.fechaInicio || '');
+                  setFechaFinRaw(res.fechaFin || '');
                 } else {
                   setResultado(res);
                   // Actualizar la fecha fin a medida que llegan chunks
+                  setFechaInicioRaw(prev => prev || res.fechaInicio || '');
                   setFechaFinRaw(res.fechaFin || '');
                 }
               }
@@ -425,6 +453,7 @@ export default function Home() {
             onError={setError}
             onCargando={setCargando}
             onFechaInicio={setFechaInicioRaw}
+            onDuracionSimulacion={setDuracionAnimacionMinutos}
           />
           {error && (
             <div className="p-3 mt-4 bg-red-900/20 border border-red-500/30 rounded-lg text-red-300 text-xs fade-in-up text-center">
