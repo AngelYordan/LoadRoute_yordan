@@ -173,6 +173,15 @@ public class Parsers {
                                                     String nombreArchivo,
                                                     Map<String, Aeropuerto> aeropuertos,
                                                     int limite) throws IOException {
+        return parsearEnvios(inputStream, nombreArchivo, aeropuertos, limite, null, null);
+    }
+
+    public static Map<String, Envio> parsearEnvios(InputStream inputStream,
+                                                    String nombreArchivo,
+                                                    Map<String, Aeropuerto> aeropuertos,
+                                                    int limite,
+                                                    LocalDateTime fechaInicio,
+                                                    LocalDateTime fechaFin) throws IOException {
         Map<String, Envio> mapa = new LinkedHashMap<>();
 
         String codigoOrigen = extraerIATADeNombreArchivo(nombreArchivo);
@@ -183,45 +192,55 @@ public class Parsers {
                     "Verificar que el nombre del archivo sea _envios_XXXX_.txt");
         }
 
-        List<String> lineas = leerLineas(inputStream, StandardCharsets.UTF_8);
-        int cargados = 0, omitidos = 0;
+        int cargados = 0, omitidos = 0, fueraDeRango = 0;
         DateTimeFormatter fmtFecha = DateTimeFormatter.ofPattern("yyyyMMdd'T'HH:mm");
 
-        for (String linea : lineas) {
-            linea = linea.trim();
-            if (linea.isEmpty()) continue;
-            if (limite > 0 && cargados >= limite) break;
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
+            String linea;
+            while ((linea = reader.readLine()) != null) {
+                linea = linea.trim();
+                if (linea.isEmpty()) continue;
+                if (limite > 0 && cargados >= limite) break;
 
-            String[] partes = linea.split("-");
-            if (partes.length < 7) continue;
+                String[] partes = linea.split("-", 7);
+                if (partes.length < 7) continue;
 
-            try {
-                String id         = partes[0].trim();
-                String fecha      = partes[1].trim();
-                String hora       = partes[2].trim();
-                String minuto     = partes[3].trim();
-                String codDestino = partes[4].trim();
-                int    maletas    = Integer.parseInt(partes[5].trim());
-                String idCliente  = partes[6].trim();
+                try {
+                    String id         = partes[0].trim();
+                    String fecha      = partes[1].trim();
+                    String hora       = partes[2].trim();
+                    String minuto     = partes[3].trim();
+                    String codDestino = partes[4].trim();
+                    int    maletas    = Integer.parseInt(partes[5].trim());
+                    String idCliente  = partes[6].trim();
 
-                Aeropuerto destino = aeropuertos.get(codDestino);
-                if (destino == null) { omitidos++; continue; }
+                    LocalDateTime recepcion = LocalDateTime.parse(
+                            fecha + "T" + hora + ":" + minuto, fmtFecha);
+                    if (fechaInicio != null && recepcion.isBefore(fechaInicio)) {
+                        fueraDeRango++;
+                        continue;
+                    }
+                    if (fechaFin != null && recepcion.isAfter(fechaFin)) {
+                        fueraDeRango++;
+                        continue;
+                    }
 
-                LocalDateTime recepcion = LocalDateTime.parse(
-                        fecha + "T" + hora + ":" + minuto, fmtFecha);
+                    Aeropuerto destino = aeropuertos.get(codDestino);
+                    if (destino == null) { omitidos++; continue; }
 
-                // CLAVE COMPUESTA: evita colisión entre los 30 archivos de aeropuertos
-                String claveCompuesta = codigoOrigen + "_" + id;
-                Envio envio = new Envio(claveCompuesta, idCliente, origen, destino, recepcion, maletas);
-                mapa.put(claveCompuesta, envio);
-                cargados++;
-            } catch (Exception e) {
-                // Linea no parseable, ignorar
+                    // CLAVE COMPUESTA: evita colisión entre los 30 archivos de aeropuertos
+                    String claveCompuesta = codigoOrigen + "_" + id;
+                    Envio envio = new Envio(claveCompuesta, idCliente, origen, destino, recepcion, maletas);
+                    mapa.put(claveCompuesta, envio);
+                    cargados++;
+                } catch (Exception e) {
+                    // Linea no parseable, ignorar
+                }
             }
         }
 
-        LOG.info(String.format("Envios cargados desde %s: %d | omitidos: %d",
-                codigoOrigen, cargados, omitidos));
+        LOG.info(String.format("Envios cargados desde %s: %d | fuera de rango: %d | omitidos: %d",
+                codigoOrigen, cargados, fueraDeRango, omitidos));
         return mapa;
     }
 

@@ -1,9 +1,11 @@
 package com.loadroute.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.ArrayList;
 import java.util.List;
 
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class SimulacionJobDTO {
 
     @JsonProperty("jobId")
@@ -20,6 +22,12 @@ public class SimulacionJobDTO {
 
     @JsonProperty("chunks")
     private List<RutaResponseDTO> chunks = new ArrayList<>();
+
+    @JsonProperty("chunkCount")
+    private Integer chunkCount;
+
+    @JsonProperty("chunkStart")
+    private Integer chunkStart;
 
     @JsonProperty("error")
     private String error;
@@ -45,17 +53,36 @@ public class SimulacionJobDTO {
     public String getMessage() { return message; }
     public void setMessage(String message) { this.message = message; }
 
-    public List<RutaResponseDTO> getChunks() { return chunks; }
-    public void setChunks(List<RutaResponseDTO> chunks) { this.chunks = chunks; }
-    public void addChunk(RutaResponseDTO chunk) { this.chunks.add(chunk); }
+    public synchronized List<RutaResponseDTO> getChunks() { return chunks; }
+    public synchronized void setChunks(List<RutaResponseDTO> chunks) { this.chunks = chunks; }
+    public synchronized void addChunk(RutaResponseDTO chunk) { this.chunks.add(chunk); }
+
+    public Integer getChunkCount() { return chunkCount; }
+    public void setChunkCount(Integer chunkCount) { this.chunkCount = chunkCount; }
+
+    public Integer getChunkStart() { return chunkStart; }
+    public void setChunkStart(Integer chunkStart) { this.chunkStart = chunkStart; }
 
     public String getError() { return error; }
     public void setError(String error) { this.error = error; }
 
-    public SimulacionJobDTO copy() {
+    public synchronized SimulacionJobDTO copyStatus() {
         SimulacionJobDTO dto = new SimulacionJobDTO(jobId, status, progress, message);
         dto.setError(error);
-        dto.setChunks(new ArrayList<>(chunks));
+        dto.setChunks(null);
+        dto.setChunkCount(chunks != null ? chunks.size() : 0);
+        dto.setChunkStart(null);
+        return dto;
+    }
+
+    public synchronized SimulacionJobDTO copyChunks(int desde) {
+        int total = chunks != null ? chunks.size() : 0;
+        int inicio = Math.max(0, Math.min(desde, total));
+        SimulacionJobDTO dto = new SimulacionJobDTO(jobId, status, progress, message);
+        dto.setError(error);
+        dto.setChunkCount(total);
+        dto.setChunkStart(inicio);
+        dto.setChunks(new ArrayList<>(chunks.subList(inicio, total)));
         return dto;
     }
 }
