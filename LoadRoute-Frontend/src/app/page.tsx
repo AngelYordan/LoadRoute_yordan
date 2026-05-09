@@ -1,15 +1,16 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import ControlPanel from '@/components/ControlPanel';
 import SidebarInfo from '@/components/SidebarInfo';
+import SidebarFiltroMapa from '@/components/SidebarFiltroMapa';
 import ModalEnvio from '@/components/ModalEnvio';
 import ModalAeropuerto from '@/components/ModalAeropuerto';
 import ModalVuelo from '@/components/ModalVuelo';
 import ResultadosPanel from '@/components/ResultadosPanel';
 import SidebarVuelos from '@/components/SidebarVuelos';
-import { RutaResponse, RutaMuestra, AeropuertoDTO, TramoDTO } from '@/types/rutas';
+import { RutaResponse, RutaMuestra, AeropuertoDTO, TramoDTO, FiltrosAvionesMapa } from '@/types/rutas';
 import { verificarSaludBackend } from '@/services/ruteoService';
 import { calcularUltimasCargasAeropuertos } from '@/utils/capacidad';
 
@@ -24,13 +25,38 @@ const MapaRutas = dynamic(() => import('@/components/MapaRutas'), {
 });
 
 // ── Tipos de tabs ──
-type TabId = 'pedidos' | 'aeropuertos' | 'simulacion' | 'vuelos';
+type TabId = 'pedidos' | 'aeropuertos' | 'simulacion' | 'pantalla' | 'vuelos';
 type ModoMapa = 'sa' | 'alns' | 'ambos';
+const MAP_FRAME_INTERVAL_MS = 1000 / 30;
 
-const NAV_TABS: { id: TabId; icon: string; label: string; color: string }[] = [
+function PantallaIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
+      <rect x="3" y="4" width="18" height="12" rx="2" fill="none" stroke="currentColor" strokeWidth="2" />
+      <path d="M9 20h6M12 16v4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+const FILTROS_AVIONES_INICIALES: FiltrosAvionesMapa = {
+  usarOrigen: true,
+  usarDestino: false,
+  origenes: [],
+  destinos: [],
+};
+
+function crearFiltrosAvionesPorDefecto(aeropuertos: AeropuertoDTO[]): FiltrosAvionesMapa {
+  return {
+    ...FILTROS_AVIONES_INICIALES,
+    origenes: aeropuertos[0] ? [aeropuertos[0].codigo] : [],
+  };
+}
+
+const NAV_TABS: { id: TabId; icon: ReactNode; label: string; color: string }[] = [
   { id: 'pedidos',      icon: '📦', label: 'Pedidos',      color: 'blue'    },
   { id: 'aeropuertos',  icon: '🏢', label: 'Aeropuertos',  color: 'emerald' },
   { id: 'simulacion',   icon: '⚙️', label: 'Simulación',   color: 'violet'  },
+  { id: 'pantalla',     icon: <PantallaIcon />, label: 'Pantalla', color: 'cyan' },
   { id: 'vuelos',       icon: '✈️', label: 'Vuelos',       color: 'orange'  },
 ];
 
@@ -297,6 +323,8 @@ export default function Home() {
   const [activeTab,        setActiveTab]        = useState<TabId | null>('pedidos');
   const [panelResultOpen,  setPanelResultOpen]  = useState(true);
   const [modoMapa,         setModoMapa]         = useState<ModoMapa>('alns');
+  const [filtrosAvionesMapa, setFiltrosAvionesMapa] = useState<FiltrosAvionesMapa>(FILTROS_AVIONES_INICIALES);
+  const filtrosAvionesInicializadosRef = useRef(false);
 
   // Umbrales dinámicos de capacidad
   const [umbralVerde, setUmbralVerde] = useState(30);
@@ -340,7 +368,29 @@ export default function Home() {
     verificarSaludBackend().then(setBackendActivo);
   }, []);
 
-  // Timer — anima con requestAnimationFrame para mantener movimiento fluido a 60fps
+  const inicializarFiltrosAvionesMapa = useCallback((aeropuertos: AeropuertoDTO[]) => {
+    if (filtrosAvionesInicializadosRef.current) return;
+    filtrosAvionesInicializadosRef.current = true;
+    setFiltrosAvionesMapa(crearFiltrosAvionesPorDefecto(aeropuertos));
+  }, []);
+
+  useEffect(() => {
+    if (!resultado?.aeropuertos.length) return;
+
+    const codigosValidos = new Set(resultado.aeropuertos.map(a => a.codigo));
+    setFiltrosAvionesMapa(prev => {
+      const origenes = prev.origenes.filter(codigo => codigosValidos.has(codigo));
+      const destinos = prev.destinos.filter(codigo => codigosValidos.has(codigo));
+
+      if (origenes.length === prev.origenes.length && destinos.length === prev.destinos.length) {
+        return prev;
+      }
+
+      return { ...prev, origenes, destinos };
+    });
+  }, [resultado?.aeropuertos]);
+
+  // Timer — avanza con requestAnimationFrame y limita commits React para mantener fluida la UI.
   useEffect(() => {
     if (!isPlaying) {
       if (timerRef.current !== null) cancelAnimationFrame(timerRef.current);
@@ -352,8 +402,19 @@ export default function Home() {
     lastFrameRef.current = null;
 
     const step = (timestamp: number) => {
-      const lastFrame = lastFrameRef.current ?? timestamp;
-      const deltaMs = timestamp - lastFrame;
+      if (lastFrameRef.current === null) {
+        lastFrameRef.current = timestamp;
+        timerRef.current = requestAnimationFrame(step);
+        return;
+      }
+
+      const deltaMs = timestamp - lastFrameRef.current;
+
+      if (deltaMs < MAP_FRAME_INTERVAL_MS) {
+        timerRef.current = requestAnimationFrame(step);
+        return;
+      }
+
       lastFrameRef.current = timestamp;
 
       let continuar = true;
@@ -387,6 +448,8 @@ export default function Home() {
     setSimTotalMinutos(0);
     setFechaInicioRaw('');
     setFechaFinRaw('');
+    filtrosAvionesInicializadosRef.current = false;
+    setFiltrosAvionesMapa(FILTROS_AVIONES_INICIALES);
   };
 
   const handleStop = () => {
@@ -426,6 +489,7 @@ export default function Home() {
               const res = combineChunks(resChunks);
               if (res) {
                 setResultado(res);
+                inicializarFiltrosAvionesMapa(res.aeropuertos || []);
                 setSimTotalMinutos(0);
                 // fechaInicioRaw ya fue seteado por onFechaInicio antes de ejecutar
                 // res.fechaFin es el último chunk en YYYYMMDD
@@ -439,6 +503,7 @@ export default function Home() {
               if (res) {
                 if (!resultado) {
                   setResultado(res);
+                  inicializarFiltrosAvionesMapa(res.aeropuertos || []);
                   setSimTotalMinutos(0);
                   setFechaInicioRaw(prev => prev || res.fechaInicio || '');
                   setFechaFinRaw(res.fechaFin || '');
@@ -510,6 +575,8 @@ export default function Home() {
               blue:    'bg-blue-500/20 text-blue-400 shadow-blue-500/20',
               emerald: 'bg-emerald-500/20 text-emerald-400 shadow-emerald-500/20',
               violet:  'bg-violet-500/20 text-violet-400 shadow-violet-500/20',
+              cyan:    'bg-cyan-500/20 text-cyan-300 shadow-cyan-500/20',
+              orange:  'bg-orange-500/20 text-orange-400 shadow-orange-500/20',
             };
             return (
               <div key={tab.id} className="relative group">
@@ -549,6 +616,7 @@ export default function Home() {
             umbralAmbar={umbralAmbar}
             modoMapa={modoMapa}
             onModoMapa={setModoMapa}
+            filtrosAviones={filtrosAvionesMapa}
           />
 
           {/* ── PANEL LATERAL IZQUIERDO — flotante, no afecta el ancho del mapa ── */}
@@ -598,6 +666,13 @@ export default function Home() {
                     umbralAmbar={umbralAmbar}
                     onUmbralVerde={handleUmbralVerde}
                     onUmbralAmbar={handleUmbralAmbar}
+                  />
+                )}
+                {activeTab === 'pantalla' && (
+                  <SidebarFiltroMapa
+                    aeropuertos={resultado.aeropuertos}
+                    filtros={filtrosAvionesMapa}
+                    onChange={setFiltrosAvionesMapa}
                   />
                 )}
                 {activeTab === 'vuelos' && (

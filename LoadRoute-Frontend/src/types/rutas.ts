@@ -74,6 +74,13 @@ export interface RutaResponse {
   cancelacionesPorDiaALNS?: number[][];
 }
 
+export interface FiltrosAvionesMapa {
+  usarOrigen: boolean;
+  usarDestino: boolean;
+  origenes: string[];
+  destinos: string[];
+}
+
 export interface SimulacionJob {
   jobId: string;
   status: 'PENDING' | 'RUNNING' | 'DONE' | 'ERROR';

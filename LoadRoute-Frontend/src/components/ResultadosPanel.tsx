@@ -274,7 +274,7 @@ function ComparativaPanel({
   );
 }
 
-export default function ResultadosPanel({
+function ResultadosPanel({
   resultadoSA,
   resultadoALNS,
   escenario,
@@ -304,6 +304,8 @@ export default function ResultadosPanel({
     </div>
   );
 }
+
+export default React.memo(ResultadosPanel);
 
 function ratioAsignados(res: ResultadoAlgoritmo): number {
   return res.enviosAsignados / Math.max(res.totalEnvios, 1);
