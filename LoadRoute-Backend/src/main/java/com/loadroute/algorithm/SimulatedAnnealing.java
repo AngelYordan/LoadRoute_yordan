@@ -63,7 +63,7 @@ public class SimulatedAnnealing {
 
     public SimulatedAnnealing(RedLogistica red) {
         this.red = red;
-        this.rng = new Random(42);
+        this.rng = new Random();
     }
 
     // ══════════════════════════════════════════════════════════════════════════

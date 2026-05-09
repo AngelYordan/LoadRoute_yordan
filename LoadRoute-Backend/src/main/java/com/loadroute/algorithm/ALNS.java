@@ -45,7 +45,7 @@ public class ALNS {
 
     public ALNS(RedLogistica red) {
         this.red = red;
-        this.rng = new Random(42);
+        this.rng = new Random();
     }
 
     public SolucionEstado replanificarColapso(SolucionEstado solucionActual,
