@@ -119,7 +119,23 @@ public class RutasController {
 
     @GetMapping("/simular-async/{jobId}")
     public ResponseEntity<SimulacionJobDTO> estadoSimulacion(@PathVariable String jobId) {
-        SimulacionJobDTO job = asyncJobService.obtener(jobId);
+        SimulacionJobDTO job = asyncJobService.obtenerEstado(jobId);
         return job != null ? ResponseEntity.ok(job) : ResponseEntity.notFound().build();
+    }
+
+    @GetMapping("/simular-async/{jobId}/chunks")
+    public ResponseEntity<SimulacionJobDTO> chunksSimulacion(
+            @PathVariable String jobId,
+            @RequestParam(value = "desde", defaultValue = "0") int desde
+    ) {
+        SimulacionJobDTO job = asyncJobService.obtenerChunks(jobId, desde);
+        return job != null ? ResponseEntity.ok(job) : ResponseEntity.notFound().build();
+    }
+
+    @DeleteMapping("/simular-async/{jobId}")
+    public ResponseEntity<Void> eliminarSimulacion(@PathVariable String jobId) {
+        return asyncJobService.eliminar(jobId)
+                ? ResponseEntity.noContent().build()
+                : ResponseEntity.notFound().build();
     }
 }

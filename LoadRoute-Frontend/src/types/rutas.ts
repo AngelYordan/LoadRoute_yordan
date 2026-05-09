@@ -87,6 +87,8 @@ export interface SimulacionJob {
   progress: number;
   message: string;
   chunks?: RutaResponse[];
+  chunkCount?: number;
+  chunkStart?: number;
   error?: string;
 }
 

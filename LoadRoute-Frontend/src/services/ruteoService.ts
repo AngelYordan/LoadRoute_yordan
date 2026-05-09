@@ -82,6 +82,19 @@ export async function obtenerEstadoSimulacion(jobId: string): Promise<Simulacion
   return response.json();
 }
 
+export async function obtenerChunksSimulacion(jobId: string, desde = 0): Promise<SimulacionJob> {
+  const params = new URLSearchParams({ desde: String(Math.max(0, desde)) });
+  const response = await fetch(`${API_ENDPOINTS.SIMULAR_ASYNC}/${jobId}/chunks?${params.toString()}`);
+  if (!response.ok) {
+    throw new Error(`No se pudieron descargar los resultados: ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function eliminarSimulacion(jobId: string): Promise<void> {
+  await fetch(`${API_ENDPOINTS.SIMULAR_ASYNC}/${jobId}`, { method: 'DELETE' }).catch(() => undefined);
+}
+
 async function esperarResultadoSimulacion(
   jobId: string,
   onProgress?: (job: SimulacionJob) => void
@@ -91,11 +104,14 @@ async function esperarResultadoSimulacion(
     const job = await obtenerEstadoSimulacion(jobId);
     onProgress?.(job);
 
-    if (job.status === 'DONE' && job.chunks) {
-      return job.chunks;
+    if (job.status === 'DONE') {
+      const result = await obtenerChunksSimulacion(jobId, 0);
+      await eliminarSimulacion(jobId);
+      return result.chunks || [];
     }
 
     if (job.status === 'ERROR') {
+      await eliminarSimulacion(jobId);
       throw new Error(job.error || job.message || 'La simulacion fallo');
     }
   }
