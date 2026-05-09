@@ -66,7 +66,6 @@ function AlgoritmoBloque({ res, color }: { res: ResultadoAlgoritmo; color: 'blue
 
       <div className={`px-4 py-2.5 ${headerBg} flex items-center justify-between`}>
         <span className={`text-sm font-semibold ${titleColor}`}>{res.algoritmo}</span>
-        <span className="text-[10px] text-slate-400">{formatTiempo(res.tiempoEjecucionMs)}</span>
       </div>
 
       <div className="p-3 grid grid-cols-2 gap-2">
@@ -88,12 +87,18 @@ function AlgoritmoBloque({ res, color }: { res: ResultadoAlgoritmo; color: 'blue
           sub="por capacidad"
           color={(res.enviosNoAceptados || 0) > 0 ? 'red' : 'green'}
         />
-        <div className="col-span-2">
+        <div className="col-span-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
           <MetricCard
             label="Mejora Agregada"
             value={`${res.mejoraRelativa.toFixed(1)}%`}
             sub={`${res.iteraciones.toLocaleString()} iteraciones totales`}
             color={res.mejoraRelativa > 0 ? 'green' : 'red'}
+          />
+          <MetricCard
+            label="Tiempo de Ejecucion"
+            value={formatTiempo(res.tiempoEjecucionMs)}
+            sub="duracion del algoritmo"
+            color="purple"
           />
         </div>
       </div>
