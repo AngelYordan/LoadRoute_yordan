@@ -108,22 +108,23 @@ public class RuteoAlgoritmoService {
         List<Vuelo>             vuelos      = Parsers.parsearVuelos(vuelosIS, aeropuertos);
         report(progress, 18, "Aeropuertos y vuelos cargados. Leyendo envios...");
 
-        Map<String, Envio> enviosCrudos = new LinkedHashMap<>();
+        LocalDateTime inicioFiltro = fechaInicio != null ? parsearFechaInicio(fechaInicio) : null;
+        LocalDateTime finFiltro = fechaFin != null ? parsearFechaFin(fechaFin) : null;
+        Map<String, Envio> envios = new LinkedHashMap<>();
         for (MultipartFile file : enviosFiles) {
             String filename = file.getOriginalFilename() != null
                     ? file.getOriginalFilename() : "_envios_XXXX_.txt";
-            enviosCrudos.putAll(
-                Parsers.parsearEnvios(file.getInputStream(), filename, aeropuertos, 0)
+            envios.putAll(
+                Parsers.parsearEnvios(file.getInputStream(), filename, aeropuertos, 0, inicioFiltro, finFiltro)
             );
         }
 
         // ── 3. Filtrar por fecha (HORA LOCAL del aeropuerto, no GMT) ─────────
-        Map<String, Envio> envios = filtrarEnviosPorFecha(enviosCrudos, fechaInicio, fechaFin);
-        report(progress, 30, String.format("Filtro aplicado: %d envios en el rango.", envios.size()));
+        report(progress, 30, String.format("Filtro aplicado durante lectura: %d envios en el rango.", envios.size()));
 
         LOG.info(String.format(
-            "Datos cargados: %d aeropuertos | %d vuelos | %d envíos totales → %d tras filtro [%s a %s]",
-            aeropuertos.size(), vuelos.size(), enviosCrudos.size(), envios.size(),
+            "Datos cargados: %d aeropuertos | %d vuelos | %d envios en rango [%s a %s]",
+            aeropuertos.size(), vuelos.size(), envios.size(),
             fechaInicio != null ? fechaInicio : "inicio",
             fechaFin    != null ? fechaFin    : "fin"
         ));

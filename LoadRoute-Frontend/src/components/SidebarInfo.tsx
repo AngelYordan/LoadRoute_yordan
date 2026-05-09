@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { RutaMuestra, AeropuertoDTO } from '@/types/rutas';
 import { calcularCargaAeropuertoActual, porcentajeOcupacion } from '@/utils/capacidad';
 
@@ -12,6 +12,9 @@ interface SidebarInfoProps {
   onSelectAeropuerto: (a: AeropuertoDTO) => void;
 }
 
+const PEDIDO_ROW_HEIGHT = 78;
+const PEDIDO_OVERSCAN = 8;
+
 function SidebarInfo({
   envios,
   aeropuertos,
@@ -23,6 +26,9 @@ function SidebarInfo({
 }: SidebarInfoProps) {
   const [searchEnvios, setSearchEnvios] = useState('');
   const [searchAero, setSearchAero] = useState('');
+  const pedidosScrollRef = useRef<HTMLDivElement | null>(null);
+  const [pedidosScrollTop, setPedidosScrollTop] = useState(0);
+  const [pedidosViewportHeight, setPedidosViewportHeight] = useState(0);
 
   const filteredEnvios = useMemo(() => envios.filter(e => {
     const q = searchEnvios.toLowerCase();
@@ -33,6 +39,37 @@ function SidebarInfo({
       e.destino.toLowerCase().includes(q)
     );
   }), [envios, searchEnvios]);
+
+  useEffect(() => {
+    const el = pedidosScrollRef.current;
+    if (!el) return;
+
+    const updateHeight = () => setPedidosViewportHeight(el.clientHeight);
+    updateHeight();
+
+    const resizeObserver = new ResizeObserver(updateHeight);
+    resizeObserver.observe(el);
+    return () => resizeObserver.disconnect();
+  }, [activeTab]);
+
+  useEffect(() => {
+    setPedidosScrollTop(0);
+    if (pedidosScrollRef.current) pedidosScrollRef.current.scrollTop = 0;
+  }, [searchEnvios]);
+
+  const pedidosVirtuales = useMemo(() => {
+    const total = filteredEnvios.length;
+    const start = Math.max(0, Math.floor(pedidosScrollTop / PEDIDO_ROW_HEIGHT) - PEDIDO_OVERSCAN);
+    const visible = Math.ceil(Math.max(pedidosViewportHeight, PEDIDO_ROW_HEIGHT) / PEDIDO_ROW_HEIGHT);
+    const end = Math.min(total, start + visible + PEDIDO_OVERSCAN * 2);
+
+    return {
+      start,
+      end,
+      totalHeight: total * PEDIDO_ROW_HEIGHT,
+      items: filteredEnvios.slice(start, end),
+    };
+  }, [filteredEnvios, pedidosScrollTop, pedidosViewportHeight]);
 
   const filteredAero = useMemo(() => aeropuertos.filter(a => {
     const q = searchAero.toLowerCase();
@@ -113,30 +150,43 @@ function SidebarInfo({
           </div>
         </div>
         {/* List */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
+        <div
+          ref={pedidosScrollRef}
+          onScroll={e => setPedidosScrollTop(e.currentTarget.scrollTop)}
+          className="flex-1 overflow-y-auto p-3 custom-scrollbar"
+        >
           {filteredEnvios.length === 0 ? (
             <p className="text-center text-slate-600 text-xs pt-8">Sin resultados</p>
           ) : (
-            filteredEnvios.map(e => (
-              <div
-                key={e.envioId}
-                onClick={() => onSelectEnvio(e)}
-                className="bg-[#122340] border border-slate-700/50 rounded-lg p-3 cursor-pointer
-                           hover:border-blue-500/50 hover:bg-[#162a4d] transition-all"
-              >
-                <div className="flex justify-between items-center mb-1">
-                  <span className="font-mono text-xs text-blue-400">{e.envioId}</span>
-                  <span className="bg-slate-800 text-[10px] px-2 py-0.5 rounded text-slate-400">
-                    {e.maletas} maletas
-                  </span>
+            <div className="relative" style={{ height: `${pedidosVirtuales.totalHeight}px` }}>
+              {pedidosVirtuales.items.map((e, index) => (
+                <div
+                  key={e.envioId}
+                  style={{
+                    position: 'absolute',
+                    top: `${(pedidosVirtuales.start + index) * PEDIDO_ROW_HEIGHT}px`,
+                    left: 0,
+                    right: 0,
+                    height: `${PEDIDO_ROW_HEIGHT - 8}px`,
+                  }}
+                  onClick={() => onSelectEnvio(e)}
+                  className="bg-[#122340] border border-slate-700/50 rounded-lg p-3 cursor-pointer
+                             hover:border-blue-500/50 hover:bg-[#162a4d] transition-all"
+                >
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="font-mono text-xs text-blue-400">{e.envioId}</span>
+                    <span className="bg-slate-800 text-[10px] px-2 py-0.5 rounded text-slate-400">
+                      {e.maletas} maletas
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-2 text-xs font-mono text-slate-300">
+                    <span>{e.origen}</span>
+                    <span className="text-slate-500 text-[10px]">→</span>
+                    <span>{e.destino}</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 mt-2 text-xs font-mono text-slate-300">
-                  <span>{e.origen}</span>
-                  <span className="text-slate-500 text-[10px]">→</span>
-                  <span>{e.destino}</span>
-                </div>
-              </div>
-            ))
+              ))}
+            </div>
           )}
         </div>
       </div>
