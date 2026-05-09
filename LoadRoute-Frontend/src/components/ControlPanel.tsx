@@ -9,6 +9,7 @@ interface ControlPanelProps {
   onError: (error: string) => void;
   onCargando: (cargando: boolean) => void;
   onFechaInicio?: (fecha: string) => void;
+  onDuracionSimulacion?: (minutos: number) => void;
   onProgressJob?: (job: SimulacionJob) => void;
 }
 
@@ -56,12 +57,16 @@ const ALGORITMOS: { id: AlgoritmoSeleccion; label: string; desc: string }[] = [
   { id: 'alns', label: 'Solo ALNS', desc: 'Adaptive Large Neighborhood Search' },
 ];
 
+const DURACION_PERIODO_MIN = 10;
+const DURACION_PERIODO_MAX = 90;
+const DURACION_PERIODO_STEP = 5;
+
 /** Convierte 'YYYY-MM-DD' (HTML date input) a 'YYYYMMDD' (backend) */
 function toBackendDate(htmlDate: string): string {
   return htmlDate.replace(/-/g, '');
 }
 
-export default function ControlPanel({ onResultado, onError, onCargando, onFechaInicio, onProgressJob }: ControlPanelProps) {
+export default function ControlPanel({ onResultado, onError, onCargando, onFechaInicio, onDuracionSimulacion, onProgressJob }: ControlPanelProps) {
   const [archivos, setArchivos] = useState<Record<string, FileState>>({
     aeropuertos: { files: [], name: '' },
     vuelos: { files: [], name: '' },
@@ -69,6 +74,7 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
   });
   const [escenario, setEscenario] = useState(1);
   const [algoritmos, setAlgoritmos] = useState<AlgoritmoSeleccion>('ambos');
+  const [duracionPeriodoMinutos, setDuracionPeriodoMinutos] = useState(60);
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
   const [ejecutando, setEjecutando] = useState(false);
@@ -103,6 +109,7 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
     setEjecutando(true);
     onCargando(true);
     onError('');
+    if (escenario === 1) onDuracionSimulacion?.(duracionPeriodoMinutos);
     setProgreso({ jobId: '', status: 'PENDING', progress: 0, message: 'Preparando simulacion...' });
     try {
       const resultado = await ejecutarSimulacion(
@@ -254,6 +261,33 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
           })}
         </div>
       </div>
+
+      {/* Duración de periodo */}
+      {escenario === 1 && (
+        <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              Duración de Simulación
+            </h3>
+            <span className="shrink-0 rounded-md border border-cyan-400/30 bg-cyan-500/15 px-2.5 py-1 text-xs font-semibold text-cyan-100">
+              {duracionPeriodoMinutos} min
+            </span>
+          </div>
+          <input
+            type="range"
+            min={DURACION_PERIODO_MIN}
+            max={DURACION_PERIODO_MAX}
+            step={DURACION_PERIODO_STEP}
+            value={duracionPeriodoMinutos}
+            onChange={e => setDuracionPeriodoMinutos(Number(e.target.value))}
+            className="w-full cursor-pointer accent-cyan-400"
+          />
+          <div className="mt-2 flex justify-between text-[10px] font-medium text-slate-500">
+            <span>{DURACION_PERIODO_MIN} min</span>
+            <span>{DURACION_PERIODO_MAX} min</span>
+          </div>
+        </div>
+      )}
 
       {/* Algoritmo a ejecutar (solo periodo) */}
       {escenario === 1 && (

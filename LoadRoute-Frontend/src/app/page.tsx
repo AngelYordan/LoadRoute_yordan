@@ -1,16 +1,18 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import ControlPanel from '@/components/ControlPanel';
 import SidebarInfo from '@/components/SidebarInfo';
+import SidebarFiltroMapa from '@/components/SidebarFiltroMapa';
 import ModalEnvio from '@/components/ModalEnvio';
 import ModalAeropuerto from '@/components/ModalAeropuerto';
 import ModalVuelo from '@/components/ModalVuelo';
 import ResultadosPanel from '@/components/ResultadosPanel';
 import SidebarVuelos from '@/components/SidebarVuelos';
-import { RutaResponse, RutaMuestra, AeropuertoDTO, TramoDTO } from '@/types/rutas';
+import { RutaResponse, RutaMuestra, AeropuertoDTO, TramoDTO, FiltrosAvionesMapa } from '@/types/rutas';
 import { verificarSaludBackend } from '@/services/ruteoService';
+import { calcularUltimasCargasAeropuertos } from '@/utils/capacidad';
 
 const MapaRutas = dynamic(() => import('@/components/MapaRutas'), {
   ssr: false,
@@ -23,13 +25,38 @@ const MapaRutas = dynamic(() => import('@/components/MapaRutas'), {
 });
 
 // ── Tipos de tabs ──
-type TabId = 'pedidos' | 'aeropuertos' | 'simulacion' | 'vuelos';
+type TabId = 'pedidos' | 'aeropuertos' | 'simulacion' | 'pantalla' | 'vuelos';
 type ModoMapa = 'sa' | 'alns' | 'ambos';
+const MAP_FRAME_INTERVAL_MS = 1000 / 30;
 
-const NAV_TABS: { id: TabId; icon: string; label: string; color: string }[] = [
+function PantallaIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
+      <rect x="3" y="4" width="18" height="12" rx="2" fill="none" stroke="currentColor" strokeWidth="2" />
+      <path d="M9 20h6M12 16v4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+const FILTROS_AVIONES_INICIALES: FiltrosAvionesMapa = {
+  usarOrigen: true,
+  usarDestino: false,
+  origenes: [],
+  destinos: [],
+};
+
+function crearFiltrosAvionesPorDefecto(aeropuertos: AeropuertoDTO[]): FiltrosAvionesMapa {
+  return {
+    ...FILTROS_AVIONES_INICIALES,
+    origenes: aeropuertos[0] ? [aeropuertos[0].codigo] : [],
+  };
+}
+
+const NAV_TABS: { id: TabId; icon: ReactNode; label: string; color: string }[] = [
   { id: 'pedidos',      icon: '📦', label: 'Pedidos',      color: 'blue'    },
   { id: 'aeropuertos',  icon: '🏢', label: 'Aeropuertos',  color: 'emerald' },
   { id: 'simulacion',   icon: '⚙️', label: 'Simulación',   color: 'violet'  },
+  { id: 'pantalla',     icon: <PantallaIcon />, label: 'Pantalla', color: 'cyan' },
   { id: 'vuelos',       icon: '✈️', label: 'Vuelos',       color: 'orange'  },
 ];
 
@@ -70,6 +97,26 @@ function getDiasRango(fechaInicioRaw?: string, fechaFinRaw?: string): number | n
   return Math.floor((fin.getTime() - inicio.getTime()) / MS_POR_DIA);
 }
 
+function getTimelineMaxMinutos(resultado: RutaResponse | null): number | null {
+  if (!resultado) return null;
+  const rutas = [
+    ...(resultado.resultadoSA?.rutasMuestra || []),
+    ...(resultado.resultadoALNS?.rutasMuestra || []),
+  ];
+
+  let max = 0;
+  for (const ruta of rutas) {
+    for (const tramo of ruta.tramos || []) {
+      if (tramo.diaOffset === undefined || tramo.llegadaMinutosGMT === undefined) continue;
+      let llegada = tramo.diaOffset * 1440 + tramo.llegadaMinutosGMT;
+      if (tramo.llegadaMinutosGMT < tramo.salidaMinutosGMT) llegada += 1440;
+      max = Math.max(max, llegada);
+    }
+  }
+
+  return max > 0 ? max : null;
+}
+
 function formatoHora(minutos: number): string {
   const h = Math.floor(minutos / 60) % 24;
   const mn = Math.floor(minutos % 60);
@@ -81,6 +128,7 @@ function combineChunks(chunks: RutaResponse[] | undefined): RutaResponse | null 
   const base = { ...chunks[0] };
   base.resultadoSA = base.resultadoSA ? { ...base.resultadoSA, rutasMuestra: [...base.resultadoSA.rutasMuestra] } : null;
   base.resultadoALNS = base.resultadoALNS ? { ...base.resultadoALNS, rutasMuestra: [...base.resultadoALNS.rutasMuestra] } : null;
+  base.totalEnviosCargados = chunks.reduce((total, c) => total + (c.totalEnviosCargados || 0), 0);
   
   base.cancelacionesPorDiaSA = [];
   base.cancelacionesPorDiaALNS = [];
@@ -99,6 +147,7 @@ function combineChunks(chunks: RutaResponse[] | undefined): RutaResponse | null 
     if (i === 0) continue; // Las métricas del primer chunk ya están en `base`
 
     base.fechaFin = c.fechaFin;
+    base.loteFin = c.loteFin || base.loteFin;
     // Agregamos las métricas acumuladas
     if (base.resultadoSA && c.resultadoSA) {
       base.resultadoSA.costoInicial += c.resultadoSA.costoInicial;
@@ -266,6 +315,7 @@ export default function Home() {
   const [isPlaying,        setIsPlaying]        = useState(false);
   const [fechaInicioRaw,   setFechaInicioRaw]   = useState(''); // YYYYMMDD
   const [fechaFinRaw,      setFechaFinRaw]      = useState(''); // YYYYMMDD
+  const [duracionAnimacionMinutos, setDuracionAnimacionMinutos] = useState(60);
   const timerRef = useRef<number | null>(null);
   const lastFrameRef = useRef<number | null>(null);
 
@@ -273,17 +323,42 @@ export default function Home() {
   const [activeTab,        setActiveTab]        = useState<TabId | null>('pedidos');
   const [panelResultOpen,  setPanelResultOpen]  = useState(true);
   const [modoMapa,         setModoMapa]         = useState<ModoMapa>('alns');
+  const [filtrosAvionesMapa, setFiltrosAvionesMapa] = useState<FiltrosAvionesMapa>(FILTROS_AVIONES_INICIALES);
+  const filtrosAvionesInicializadosRef = useRef(false);
 
   // Umbrales dinámicos de capacidad
   const [umbralVerde, setUmbralVerde] = useState(30);
   const [umbralAmbar, setUmbralAmbar] = useState(70);
   const maxSimDia = getDiasRango(fechaInicioRaw, fechaFinRaw);
+  const maxTimelineMinutos = useMemo(() => getTimelineMaxMinutos(resultado), [resultado]);
   // El limite total es (maxSimDia + 1) días completos; +1 para que el último día se complete
-  const maxTotalMinutos   = maxSimDia !== null ? (maxSimDia + 1) * 1440 : null;
+  const maxTotalMinutos   = maxSimDia !== null ? (maxSimDia + 1) * 1440 : maxTimelineMinutos;
+  const avanceMinutosPorSegundo = maxTotalMinutos !== null
+    ? maxTotalMinutos / Math.max(1, duracionAnimacionMinutos * 60)
+    : 60;
   const rangoFinalizado   = maxTotalMinutos !== null && simTotalMinutos >= maxTotalMinutos;
   const simTotalVisual    = rangoFinalizado && maxTotalMinutos !== null
     ? Math.max(0, maxTotalMinutos - (1 / 60))
     : simTotalMinutos;
+  const rutasActivas = useMemo(
+    () => resultado?.resultadoALNS?.rutasMuestra || resultado?.resultadoSA?.rutasMuestra || [],
+    [resultado?.resultadoALNS?.rutasMuestra, resultado?.resultadoSA?.rutasMuestra]
+  );
+  const rutasParaCargaFinal = useMemo(() => {
+    if (!resultado) return [];
+    if (modoMapa === 'sa') return resultado.resultadoSA?.rutasMuestra || [];
+    if (modoMapa === 'ambos') {
+      return [
+        ...(resultado.resultadoSA?.rutasMuestra || []),
+        ...(resultado.resultadoALNS?.rutasMuestra || []),
+      ];
+    }
+    return resultado.resultadoALNS?.rutasMuestra || resultado.resultadoSA?.rutasMuestra || [];
+  }, [resultado, modoMapa]);
+  const cargasAeropuertoFinales = useMemo(
+    () => rangoFinalizado ? calcularUltimasCargasAeropuertos(rutasParaCargaFinal) : null,
+    [rangoFinalizado, rutasParaCargaFinal]
+  );
 
   // Derivados del contador visual: al finalizar conserva la última ocupación del rango
   const simDia           = Math.floor(simTotalVisual / 1440);
@@ -293,7 +368,29 @@ export default function Home() {
     verificarSaludBackend().then(setBackendActivo);
   }, []);
 
-  // Timer — anima con requestAnimationFrame para mantener movimiento fluido a 60fps
+  const inicializarFiltrosAvionesMapa = useCallback((aeropuertos: AeropuertoDTO[]) => {
+    if (filtrosAvionesInicializadosRef.current) return;
+    filtrosAvionesInicializadosRef.current = true;
+    setFiltrosAvionesMapa(crearFiltrosAvionesPorDefecto(aeropuertos));
+  }, []);
+
+  useEffect(() => {
+    if (!resultado?.aeropuertos.length) return;
+
+    const codigosValidos = new Set(resultado.aeropuertos.map(a => a.codigo));
+    setFiltrosAvionesMapa(prev => {
+      const origenes = prev.origenes.filter(codigo => codigosValidos.has(codigo));
+      const destinos = prev.destinos.filter(codigo => codigosValidos.has(codigo));
+
+      if (origenes.length === prev.origenes.length && destinos.length === prev.destinos.length) {
+        return prev;
+      }
+
+      return { ...prev, origenes, destinos };
+    });
+  }, [resultado?.aeropuertos]);
+
+  // Timer — avanza con requestAnimationFrame y limita commits React para mantener fluida la UI.
   useEffect(() => {
     if (!isPlaying) {
       if (timerRef.current !== null) cancelAnimationFrame(timerRef.current);
@@ -305,13 +402,24 @@ export default function Home() {
     lastFrameRef.current = null;
 
     const step = (timestamp: number) => {
-      const lastFrame = lastFrameRef.current ?? timestamp;
-      const deltaMs = timestamp - lastFrame;
+      if (lastFrameRef.current === null) {
+        lastFrameRef.current = timestamp;
+        timerRef.current = requestAnimationFrame(step);
+        return;
+      }
+
+      const deltaMs = timestamp - lastFrameRef.current;
+
+      if (deltaMs < MAP_FRAME_INTERVAL_MS) {
+        timerRef.current = requestAnimationFrame(step);
+        return;
+      }
+
       lastFrameRef.current = timestamp;
 
       let continuar = true;
       setSimTotalMinutos(prev => {
-        const next = prev + (deltaMs / 1000) * 60;
+        const next = prev + (deltaMs / 1000) * avanceMinutosPorSegundo;
         if (maxTotalMinutos !== null && next >= maxTotalMinutos) {
           continuar = false;
           setIsPlaying(false);
@@ -332,7 +440,7 @@ export default function Home() {
       timerRef.current = null;
       lastFrameRef.current = null;
     };
-  }, [isPlaying, maxTotalMinutos]);
+  }, [isPlaying, maxTotalMinutos, avanceMinutosPorSegundo]);
 
   const handleReiniciar = () => {
     setResultado(null);
@@ -340,6 +448,8 @@ export default function Home() {
     setSimTotalMinutos(0);
     setFechaInicioRaw('');
     setFechaFinRaw('');
+    filtrosAvionesInicializadosRef.current = false;
+    setFiltrosAvionesMapa(FILTROS_AVIONES_INICIALES);
   };
 
   const handleStop = () => {
@@ -379,9 +489,11 @@ export default function Home() {
               const res = combineChunks(resChunks);
               if (res) {
                 setResultado(res);
+                inicializarFiltrosAvionesMapa(res.aeropuertos || []);
                 setSimTotalMinutos(0);
                 // fechaInicioRaw ya fue seteado por onFechaInicio antes de ejecutar
                 // res.fechaFin es el último chunk en YYYYMMDD
+                setFechaInicioRaw(prev => prev || res.fechaInicio || '');
                 setFechaFinRaw(res.fechaFin || '');
                 setIsPlaying(true);
               }
@@ -391,11 +503,14 @@ export default function Home() {
               if (res) {
                 if (!resultado) {
                   setResultado(res);
+                  inicializarFiltrosAvionesMapa(res.aeropuertos || []);
                   setSimTotalMinutos(0);
-                  setIsPlaying(true);
+                  setFechaInicioRaw(prev => prev || res.fechaInicio || '');
+                  setFechaFinRaw(res.fechaFin || '');
                 } else {
                   setResultado(res);
                   // Actualizar la fecha fin a medida que llegan chunks
+                  setFechaInicioRaw(prev => prev || res.fechaInicio || '');
                   setFechaFinRaw(res.fechaFin || '');
                 }
               }
@@ -403,6 +518,7 @@ export default function Home() {
             onError={setError}
             onCargando={setCargando}
             onFechaInicio={setFechaInicioRaw}
+            onDuracionSimulacion={setDuracionAnimacionMinutos}
           />
           {error && (
             <div className="p-3 mt-4 bg-red-900/20 border border-red-500/30 rounded-lg text-red-300 text-xs fade-in-up text-center">
@@ -432,8 +548,6 @@ export default function Home() {
   // ══════════════════════════════════════════════
   // VISTA DASHBOARD
   // ══════════════════════════════════════════════
-  const rutasActivas = resultado?.resultadoALNS?.rutasMuestra || resultado?.resultadoSA?.rutasMuestra || [];
-
   return (
     <div className="h-screen bg-[#0a1628] flex flex-col overflow-hidden text-slate-200">
 
@@ -461,6 +575,8 @@ export default function Home() {
               blue:    'bg-blue-500/20 text-blue-400 shadow-blue-500/20',
               emerald: 'bg-emerald-500/20 text-emerald-400 shadow-emerald-500/20',
               violet:  'bg-violet-500/20 text-violet-400 shadow-violet-500/20',
+              cyan:    'bg-cyan-500/20 text-cyan-300 shadow-cyan-500/20',
+              orange:  'bg-orange-500/20 text-orange-400 shadow-orange-500/20',
             };
             return (
               <div key={tab.id} className="relative group">
@@ -493,12 +609,14 @@ export default function Home() {
           <MapaRutas
             resultado={resultado}
             simTiempoMinutos={simTotalVisual}
+            cargasAeropuertoOverride={cargasAeropuertoFinales}
             onSelectVuelo={setVueloModal}
             selectedVuelo={vueloModal}
             umbralVerde={umbralVerde}
             umbralAmbar={umbralAmbar}
             modoMapa={modoMapa}
             onModoMapa={setModoMapa}
+            filtrosAviones={filtrosAvionesMapa}
           />
 
           {/* ── PANEL LATERAL IZQUIERDO — flotante, no afecta el ancho del mapa ── */}
@@ -528,6 +646,7 @@ export default function Home() {
                     aeropuertos={resultado.aeropuertos}
                     activeTab={activeTab}
                     simTiempoMinutos={simTotalVisual}
+                    cargasAeropuertoOverride={cargasAeropuertoFinales}
                     onSelectEnvio={setEnvioModal}
                     onSelectAeropuerto={setAeroModal}
                   />
@@ -547,6 +666,13 @@ export default function Home() {
                     umbralAmbar={umbralAmbar}
                     onUmbralVerde={handleUmbralVerde}
                     onUmbralAmbar={handleUmbralAmbar}
+                  />
+                )}
+                {activeTab === 'pantalla' && (
+                  <SidebarFiltroMapa
+                    aeropuertos={resultado.aeropuertos}
+                    filtros={filtrosAvionesMapa}
+                    onChange={setFiltrosAvionesMapa}
                   />
                 )}
                 {activeTab === 'vuelos' && (
@@ -612,6 +738,7 @@ export default function Home() {
         aeropuerto={aeroModal}
         rutasActivas={rutasActivas}
         simTiempoMinutos={simTotalVisual}
+        cargasAeropuertoOverride={cargasAeropuertoFinales}
         onClose={() => setAeroModal(null)}
       />
       <ModalVuelo

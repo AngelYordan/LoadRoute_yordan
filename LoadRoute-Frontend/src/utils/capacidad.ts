@@ -1,5 +1,11 @@
 import { RutaMuestra, TramoDTO } from '@/types/rutas';
 
+type IntervaloCargaAeropuerto = {
+  inicio: number;
+  fin: number;
+  maletas: number;
+};
+
 function salidaTotalMinutos(t: TramoDTO): number {
   return (t.diaOffset || 0) * 1440 + t.salidaMinutosGMT;
 }
@@ -52,6 +58,70 @@ export function calcularCargaAeropuertoActual(
   }
 
   return total;
+}
+
+function agregarIntervaloCarga(
+  intervalos: Record<string, IntervaloCargaAeropuerto[]>,
+  airportCode: string,
+  inicio: number,
+  fin: number,
+  maletas: number
+) {
+  if (fin < inicio) return;
+  if (!intervalos[airportCode]) intervalos[airportCode] = [];
+  intervalos[airportCode].push({ inicio, fin, maletas });
+}
+
+export function calcularUltimasCargasAeropuertos(
+  rutas: RutaMuestra[]
+): Record<string, number> {
+  const intervalos: Record<string, IntervaloCargaAeropuerto[]> = {};
+
+  for (const ruta of rutas) {
+    if (!ruta.tramos || ruta.tramos.length === 0) continue;
+
+    const primerVuelo = ruta.tramos[0];
+    const primeraSalida = salidaTotalMinutos(primerVuelo);
+    const recepcionTotal = ((ruta.recepcionDiaOffset ?? primerVuelo.diaOffset) || 0) * 1440
+      + (ruta.recepcionMinutosGMT ?? 0);
+
+    agregarIntervaloCarga(intervalos, ruta.origen, recepcionTotal, primeraSalida, ruta.maletas);
+
+    for (let i = 0; i < ruta.tramos.length - 1; i++) {
+      const vueloLlegada = ruta.tramos[i];
+      const vueloSalida = ruta.tramos[i + 1];
+
+      agregarIntervaloCarga(
+        intervalos,
+        vueloLlegada.destino,
+        llegadaTotalMinutos(vueloLlegada),
+        salidaTotalMinutos(vueloSalida),
+        ruta.maletas
+      );
+    }
+  }
+
+  const cargas: Record<string, number> = {};
+
+  for (const [airportCode, registros] of Object.entries(intervalos)) {
+    let ultimoFin = registros[0]?.fin ?? 0;
+    for (const registro of registros) {
+      if (registro.fin > ultimoFin) ultimoFin = registro.fin;
+    }
+
+    const cargaFinal = registros.reduce((total, registro) => {
+      if (registro.inicio <= ultimoFin && ultimoFin <= registro.fin) {
+        return total + registro.maletas;
+      }
+      return total;
+    }, 0);
+
+    if (cargaFinal > 0) {
+      cargas[airportCode] = cargaFinal;
+    }
+  }
+
+  return cargas;
 }
 
 export function porcentajeOcupacion(cargaActual: number, capacidadMax: number): number {

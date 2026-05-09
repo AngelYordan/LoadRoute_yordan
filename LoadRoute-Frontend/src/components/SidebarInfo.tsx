@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { RutaMuestra, AeropuertoDTO } from '@/types/rutas';
 import { calcularCargaAeropuertoActual, porcentajeOcupacion } from '@/utils/capacidad';
 
@@ -7,22 +7,24 @@ interface SidebarInfoProps {
   aeropuertos: AeropuertoDTO[];
   activeTab: 'pedidos' | 'aeropuertos' | 'simulacion' | null;
   simTiempoMinutos?: number;
+  cargasAeropuertoOverride?: Record<string, number> | null;
   onSelectEnvio: (e: RutaMuestra) => void;
   onSelectAeropuerto: (a: AeropuertoDTO) => void;
 }
 
-export default function SidebarInfo({
+function SidebarInfo({
   envios,
   aeropuertos,
   activeTab,
   simTiempoMinutos = 0,
+  cargasAeropuertoOverride,
   onSelectEnvio,
   onSelectAeropuerto,
 }: SidebarInfoProps) {
   const [searchEnvios, setSearchEnvios] = useState('');
   const [searchAero, setSearchAero] = useState('');
 
-  const filteredEnvios = envios.filter(e => {
+  const filteredEnvios = useMemo(() => envios.filter(e => {
     const q = searchEnvios.toLowerCase();
     if (!q) return true;
     return (
@@ -30,9 +32,9 @@ export default function SidebarInfo({
       e.origen.toLowerCase().includes(q) ||
       e.destino.toLowerCase().includes(q)
     );
-  });
+  }), [envios, searchEnvios]);
 
-  const filteredAero = aeropuertos.filter(a => {
+  const filteredAero = useMemo(() => aeropuertos.filter(a => {
     const q = searchAero.toLowerCase();
     if (!q) return true;
     return (
@@ -40,10 +42,11 @@ export default function SidebarInfo({
       a.ciudad.toLowerCase().includes(q) ||
       a.pais.toLowerCase().includes(q)
     );
-  });
+  }), [aeropuertos, searchAero]);
 
   const renderAeropuerto = (a: AeropuertoDTO) => {
-    const cargaActual = calcularCargaAeropuertoActual(a.codigo, envios, simTiempoMinutos);
+    const cargaActual = cargasAeropuertoOverride?.[a.codigo]
+      ?? calcularCargaAeropuertoActual(a.codigo, envios, simTiempoMinutos);
     const porcentaje = porcentajeOcupacion(cargaActual, a.capacidadMax);
     const colorCarga =
       cargaActual > a.capacidadMax
@@ -177,3 +180,24 @@ export default function SidebarInfo({
 
   return null;
 }
+
+export default React.memo(SidebarInfo, (prev, next) => {
+  if (
+    prev.envios !== next.envios ||
+    prev.aeropuertos !== next.aeropuertos ||
+    prev.activeTab !== next.activeTab ||
+    prev.onSelectEnvio !== next.onSelectEnvio ||
+    prev.onSelectAeropuerto !== next.onSelectAeropuerto
+  ) {
+    return false;
+  }
+
+  if (next.activeTab === 'aeropuertos') {
+    return (
+      prev.simTiempoMinutos === next.simTiempoMinutos &&
+      prev.cargasAeropuertoOverride === next.cargasAeropuertoOverride
+    );
+  }
+
+  return true;
+});

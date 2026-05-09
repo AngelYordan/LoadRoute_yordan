@@ -66,10 +66,19 @@ export interface RutaResponse {
   totalEnviosCargados: number;
   fechaInicio?: string;
   fechaFin?: string;
+  loteInicio?: string;
+  loteFin?: string;
   
   // Custom frontend arrays mapped from chunks
   cancelacionesPorDiaSA?: number[][];
   cancelacionesPorDiaALNS?: number[][];
+}
+
+export interface FiltrosAvionesMapa {
+  usarOrigen: boolean;
+  usarDestino: boolean;
+  origenes: string[];
+  destinos: string[];
 }
 
 export interface SimulacionJob {

@@ -36,6 +36,12 @@ public class RutaResponseDTO {
     @JsonProperty("fechaFin")
     private String fechaFin;
 
+    @JsonProperty("loteInicio")
+    private String loteInicio;
+
+    @JsonProperty("loteFin")
+    private String loteFin;
+
     // ── Constructors ──────────────────────────────────────────────────────
 
     public RutaResponseDTO() {}
@@ -68,6 +74,12 @@ public class RutaResponseDTO {
 
     public String getFechaFin() { return fechaFin; }
     public void setFechaFin(String fechaFin) { this.fechaFin = fechaFin; }
+
+    public String getLoteInicio() { return loteInicio; }
+    public void setLoteInicio(String loteInicio) { this.loteInicio = loteInicio; }
+
+    public String getLoteFin() { return loteFin; }
+    public void setLoteFin(String loteFin) { this.loteFin = loteFin; }
 
     // ── DTOs internos ─────────────────────────────────────────────────────
 
