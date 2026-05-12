@@ -26,7 +26,6 @@ const MapaRutas = dynamic(() => import('@/components/MapaRutas'), {
 
 // ── Tipos de tabs ──
 type TabId = 'pedidos' | 'aeropuertos' | 'simulacion' | 'pantalla' | 'vuelos';
-type ModoMapa = 'sa' | 'alns' | 'ambos';
 const MAP_FRAME_INTERVAL_MS = 1000 / 30;
 
 function PantallaIcon() {
@@ -127,127 +126,52 @@ function combineChunks(chunks: RutaResponse[] | undefined): RutaResponse | null 
   if (!chunks || chunks.length === 0) return null;
   const base = { ...chunks[0] };
   base.resultadoSA = base.resultadoSA ? { ...base.resultadoSA, rutasMuestra: [...base.resultadoSA.rutasMuestra] } : null;
-  base.resultadoALNS = base.resultadoALNS ? { ...base.resultadoALNS, rutasMuestra: [...base.resultadoALNS.rutasMuestra] } : null;
+  base.resultadoALNS = null;
   base.totalEnviosCargados = chunks.reduce((total, c) => total + (c.totalEnviosCargados || 0), 0);
-  
+
   base.cancelacionesPorDiaSA = [];
   base.cancelacionesPorDiaALNS = [];
 
   for (let i = 0; i < chunks.length; i++) {
     const c = chunks[i];
-    
-    // Las cancelaciones son por cada día (incluyendo el primero)
     if (base.resultadoSA && c.resultadoSA) {
       base.cancelacionesPorDiaSA.push(c.resultadoSA.vuelosCanceladosIds || []);
     }
-    if (base.resultadoALNS && c.resultadoALNS) {
-      base.cancelacionesPorDiaALNS.push(c.resultadoALNS.vuelosCanceladosIds || []);
-    }
-
-    if (i === 0) continue; // Las métricas del primer chunk ya están en `base`
-
+    if (i === 0) continue;
     base.fechaFin = c.fechaFin;
-    base.loteFin = c.loteFin || base.loteFin;
-    // Agregamos las métricas acumuladas
+    base.loteFin  = c.loteFin || base.loteFin;
     if (base.resultadoSA && c.resultadoSA) {
-      base.resultadoSA.costoInicial += c.resultadoSA.costoInicial;
-      base.resultadoSA.costoFinal += c.resultadoSA.costoFinal;
+      base.resultadoSA.costoInicial      += c.resultadoSA.costoInicial;
+      base.resultadoSA.costoFinal        += c.resultadoSA.costoFinal;
       base.resultadoSA.tiempoEjecucionMs += c.resultadoSA.tiempoEjecucionMs;
-      base.resultadoSA.enviosAsignados += c.resultadoSA.enviosAsignados;
-      base.resultadoSA.enviosNoAceptados = (base.resultadoSA.enviosNoAceptados || 0) + (c.resultadoSA.enviosNoAceptados || 0);
-      base.resultadoSA.totalEnvios += c.resultadoSA.totalEnvios;
+      base.resultadoSA.enviosAsignados   += c.resultadoSA.enviosAsignados;
+      base.resultadoSA.enviosNoAceptados  = (base.resultadoSA.enviosNoAceptados || 0) + (c.resultadoSA.enviosNoAceptados || 0);
+      base.resultadoSA.totalEnvios       += c.resultadoSA.totalEnvios;
       base.resultadoSA.rutasMuestra.push(...c.resultadoSA.rutasMuestra);
       if (base.resultadoSA.costoInicial > 0) {
         base.resultadoSA.mejoraRelativa = ((base.resultadoSA.costoInicial - base.resultadoSA.costoFinal) / base.resultadoSA.costoInicial) * 100;
-      }
-    }
-    if (base.resultadoALNS && c.resultadoALNS) {
-      base.resultadoALNS.costoInicial += c.resultadoALNS.costoInicial;
-      base.resultadoALNS.costoFinal += c.resultadoALNS.costoFinal;
-      base.resultadoALNS.tiempoEjecucionMs += c.resultadoALNS.tiempoEjecucionMs;
-      base.resultadoALNS.enviosAsignados += c.resultadoALNS.enviosAsignados;
-      base.resultadoALNS.enviosNoAceptados = (base.resultadoALNS.enviosNoAceptados || 0) + (c.resultadoALNS.enviosNoAceptados || 0);
-      base.resultadoALNS.totalEnvios += c.resultadoALNS.totalEnvios;
-      base.resultadoALNS.rutasMuestra.push(...c.resultadoALNS.rutasMuestra);
-      base.resultadoALNS.mensajeColapso = c.resultadoALNS.mensajeColapso || base.resultadoALNS.mensajeColapso;
-      if (base.resultadoALNS.costoInicial > 0) {
-        base.resultadoALNS.mejoraRelativa = ((base.resultadoALNS.costoInicial - base.resultadoALNS.costoFinal) / base.resultadoALNS.costoInicial) * 100;
       }
     }
   }
   return base;
 }
 
-// ── Componente tab de Simulación (panel izquierdo) ──
+// ── Panel ⚙️ Simulación — solo umbrales y reinicio ──────────────────────────
 function SimulacionPanel({
-  simDia, simTiempoMinutos, fechaInicioRaw, isPlaying, rangoFinalizado,
-  onPlay, onPause, onStop, onReiniciar,
-  umbralVerde, umbralAmbar, onUmbralVerde, onUmbralAmbar,
+  umbralVerde, umbralAmbar, onUmbralVerde, onUmbralAmbar, onReiniciar,
 }: {
-  simDia: number;
-  simTiempoMinutos: number;
-  fechaInicioRaw: string;
-  isPlaying: boolean;
-  rangoFinalizado: boolean;
-  onPlay: () => void;
-  onPause: () => void;
-  onStop: () => void;
-  onReiniciar: () => void;
   umbralVerde: number;
   umbralAmbar: number;
   onUmbralVerde: (v: number) => void;
   onUmbralAmbar: (v: number) => void;
+  onReiniciar: () => void;
 }) {
   return (
     <div className="flex flex-col h-full p-4 space-y-5 overflow-y-auto custom-scrollbar">
-      {/* Fecha + Hora */}
-      <div className="bg-slate-900/60 border border-slate-700/50 rounded-xl p-4">
-        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
-          Fecha de Simulación
-        </p>
-        <p className="text-sm font-medium text-slate-300 mb-3 capitalize">
-          {formatFechaSimulacion(fechaInicioRaw, simDia)}
-        </p>
-        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
-          Hora GMT
-        </p>
-        <p className="text-3xl font-mono text-emerald-400 font-bold tracking-wider">
-          {formatoHora(simTiempoMinutos)}
-        </p>
-        {rangoFinalizado && (
-          <p className="mt-3 text-[10px] font-semibold text-emerald-300 uppercase tracking-wider">
-            Rango finalizado
-          </p>
-        )}
-      </div>
-
-      {/* Controles de reproducción */}
-      <div>
-        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Controles</p>
-        <div className="grid grid-cols-3 gap-2">
-          <button onClick={onPlay} disabled={isPlaying || rangoFinalizado}
-            className={`flex flex-col items-center gap-1 py-3 rounded-lg text-xs font-semibold transition-all
-              ${isPlaying ? 'bg-blue-600/80 text-white ring-1 ring-blue-400/30' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'}
-              ${rangoFinalizado ? 'opacity-50 cursor-not-allowed' : ''}`}>
-            <span className="text-base">▶</span>Iniciar
-          </button>
-          <button onClick={onPause} disabled={!isPlaying}
-            className={`flex flex-col items-center gap-1 py-3 rounded-lg text-xs font-semibold transition-all
-              ${!isPlaying ? 'bg-amber-600/80 text-white ring-1 ring-amber-400/30' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'}`}>
-            <span className="text-base">⏸</span>Pausar
-          </button>
-          <button onClick={onStop}
-            className="flex flex-col items-center gap-1 py-3 rounded-lg text-xs font-semibold bg-slate-800 text-slate-400 hover:bg-red-900/40 hover:text-red-400 transition-all">
-            <span className="text-base">⏹</span>Detener
-          </button>
-        </div>
-      </div>
-
-      {/* Leyenda dinámica de capacidad */}
+      {/* Umbral de Capacidad */}
       <div className="bg-slate-900/60 border border-slate-700/50 rounded-xl p-4">
         <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-3">Umbral de Capacidad</p>
         <div className="space-y-3">
-          {/* Verde */}
           <div className="flex items-center gap-3">
             <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0 shadow-[0_0_6px_rgba(16,185,129,0.6)]" />
             <div className="flex-1">
@@ -259,7 +183,6 @@ function SimulacionPanel({
                 className="w-full h-1 cursor-pointer accent-emerald-500" />
             </div>
           </div>
-          {/* Ámbar */}
           <div className="flex items-center gap-3">
             <div className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0 shadow-[0_0_6px_rgba(245,158,11,0.6)]" />
             <div className="flex-1">
@@ -271,7 +194,6 @@ function SimulacionPanel({
                 className="w-full h-1 cursor-pointer accent-amber-500" />
             </div>
           </div>
-          {/* Rojo (fijo) */}
           <div className="flex items-center gap-3">
             <div className="w-2.5 h-2.5 rounded-full bg-red-500 shrink-0 shadow-[0_0_6px_rgba(239,68,68,0.6)]" />
             <span className="text-[10px] text-slate-400">Rojo — {umbralAmbar + 1}–100%</span>
@@ -279,18 +201,14 @@ function SimulacionPanel({
         </div>
       </div>
 
-      {/* Separador */}
       <div className="border-t border-slate-700/50" />
 
-      {/* Cargar nuevos datos */}
       <button
         onClick={onReiniciar}
         className="w-full flex items-center justify-center gap-2 py-3 rounded-lg border border-slate-600/50
-                   text-sm text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 hover:border-slate-500
-                   transition-all"
+                   text-sm text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 hover:border-slate-500 transition-all"
       >
-        <span>🔄</span>
-        Cargar nuevos datos
+        <span>🔄</span> Cargar nuevos datos
       </button>
     </div>
   );
@@ -316,14 +234,13 @@ export default function Home() {
   const [fechaInicioRaw,   setFechaInicioRaw]   = useState(''); // YYYYMMDD
   const [fechaFinRaw,      setFechaFinRaw]      = useState(''); // YYYYMMDD
   const [duracionAnimacionMinutos, setDuracionAnimacionMinutos] = useState(60);
+  const [horaReal,         setHoraReal]         = useState(() => new Date());
   const timerRef = useRef<number | null>(null);
   const lastFrameRef = useRef<number | null>(null);
 
   // Layout
-  const [activeTab,        setActiveTab]        = useState<TabId | null>('pedidos');
-  const [panelResultOpen,  setPanelResultOpen]  = useState(true);
-  const [modoMapa,         setModoMapa]         = useState<ModoMapa>('alns');
-  const [filtrosAvionesMapa, setFiltrosAvionesMapa] = useState<FiltrosAvionesMapa>(FILTROS_AVIONES_INICIALES);
+  const [activeTab,        setActiveTab]        = useState<TabId | null>(null);
+  const [panelResultOpen,  setPanelResultOpen]  = useState(false);
   const filtrosAvionesInicializadosRef = useRef(false);
 
   // Umbrales dinámicos de capacidad
@@ -341,20 +258,13 @@ export default function Home() {
     ? Math.max(0, maxTotalMinutos - (1 / 60))
     : simTotalMinutos;
   const rutasActivas = useMemo(
-    () => resultado?.resultadoALNS?.rutasMuestra || resultado?.resultadoSA?.rutasMuestra || [],
-    [resultado?.resultadoALNS?.rutasMuestra, resultado?.resultadoSA?.rutasMuestra]
+    () => resultado?.resultadoSA?.rutasMuestra || [],
+    [resultado?.resultadoSA?.rutasMuestra]
   );
   const rutasParaCargaFinal = useMemo(() => {
     if (!resultado) return [];
-    if (modoMapa === 'sa') return resultado.resultadoSA?.rutasMuestra || [];
-    if (modoMapa === 'ambos') {
-      return [
-        ...(resultado.resultadoSA?.rutasMuestra || []),
-        ...(resultado.resultadoALNS?.rutasMuestra || []),
-      ];
-    }
-    return resultado.resultadoALNS?.rutasMuestra || resultado.resultadoSA?.rutasMuestra || [];
-  }, [resultado, modoMapa]);
+    return resultado.resultadoSA?.rutasMuestra || [];
+  }, [resultado]);
   const cargasAeropuertoFinales = useMemo(
     () => rangoFinalizado ? calcularUltimasCargasAeropuertos(rutasParaCargaFinal) : null,
     [rangoFinalizado, rutasParaCargaFinal]
@@ -368,27 +278,18 @@ export default function Home() {
     verificarSaludBackend().then(setBackendActivo);
   }, []);
 
-  const inicializarFiltrosAvionesMapa = useCallback((aeropuertos: AeropuertoDTO[]) => {
-    if (filtrosAvionesInicializadosRef.current) return;
-    filtrosAvionesInicializadosRef.current = true;
-    setFiltrosAvionesMapa(crearFiltrosAvionesPorDefecto(aeropuertos));
+  // Reloj de tiempo real
+  useEffect(() => {
+    const id = setInterval(() => setHoraReal(new Date()), 1000);
+    return () => clearInterval(id);
   }, []);
 
-  useEffect(() => {
-    if (!resultado?.aeropuertos.length) return;
+  const [filtrosAvionesMapa, setFiltrosAvionesMapa] = useState<FiltrosAvionesMapa>(FILTROS_AVIONES_INICIALES);
 
-    const codigosValidos = new Set(resultado.aeropuertos.map(a => a.codigo));
-    setFiltrosAvionesMapa(prev => {
-      const origenes = prev.origenes.filter(codigo => codigosValidos.has(codigo));
-      const destinos = prev.destinos.filter(codigo => codigosValidos.has(codigo));
-
-      if (origenes.length === prev.origenes.length && destinos.length === prev.destinos.length) {
-        return prev;
-      }
-
-      return { ...prev, origenes, destinos };
-    });
-  }, [resultado?.aeropuertos]);
+  const inicializarFiltrosAvionesMapa = useCallback((_aeropuertos: AeropuertoDTO[]) => {
+    if (filtrosAvionesInicializadosRef.current) return;
+    filtrosAvionesInicializadosRef.current = true;
+  }, []);
 
   // Timer — avanza con requestAnimationFrame y limita commits React para mantener fluida la UI.
   useEffect(() => {
@@ -552,15 +453,79 @@ export default function Home() {
     <div className="h-screen bg-[#0a1628] flex flex-col overflow-hidden text-slate-200">
 
       {/* ── HEADER ── */}
-      <header className="bg-[#0f1f3d] border-b border-slate-700/50 px-4 py-2.5 flex items-center gap-4 shrink-0">
-        <img src="/logo.png" alt="LoadRoute Logo" className="h-9 shrink-0" />
-        <div className="flex-1" />
-        <div className={`text-[10px] flex items-center gap-1.5 px-3 py-1.5 rounded-full border shrink-0
+      <header className="bg-[#0f1f3d] border-b border-slate-700/50 px-4 py-0 flex items-center gap-3 shrink-0 h-14">
+        {/* Logo */}
+        <img src="/logo.png" alt="LoadRoute Logo" className="h-8 shrink-0" />
+        <div className="w-px h-6 bg-slate-700/60 shrink-0" />
+
+        {/* Fecha simulada + GMT */}
+        <div className="flex items-center gap-4 flex-1">
+          <div className="flex flex-col justify-center">
+            <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider leading-none mb-0.5">Simulación</span>
+            <span className="text-xs font-medium text-slate-300 capitalize leading-none">
+              {formatFechaSimulacion(fechaInicioRaw, simDia)}
+            </span>
+          </div>
+          <div className="flex flex-col justify-center">
+            <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider leading-none mb-0.5">Hora GMT</span>
+            <span className="text-lg font-mono text-emerald-400 font-bold leading-none tracking-wider">
+              {formatoHora(simHoraMinutos)}
+            </span>
+          </div>
+          {rangoFinalizado && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+              ✓ Finalizado
+            </span>
+          )}
+
+          {/* Controles Play/Pause/Stop */}
+          <div className="flex items-center gap-1 ml-2">
+            <button
+              id="btn-play"
+              onClick={() => setIsPlaying(true)}
+              disabled={isPlaying || rangoFinalizado}
+              title="Iniciar simulación"
+              className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold transition-all
+                ${isPlaying || rangoFinalizado
+                  ? 'bg-slate-800/50 text-slate-600 cursor-not-allowed'
+                  : 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 hover:text-emerald-300 ring-1 ring-emerald-500/30'}`}
+            >▶</button>
+            <button
+              id="btn-pause"
+              onClick={() => setIsPlaying(false)}
+              disabled={!isPlaying}
+              title="Pausar simulación"
+              className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold transition-all
+                ${!isPlaying
+                  ? 'bg-slate-800/50 text-slate-600 cursor-not-allowed'
+                  : 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 hover:text-amber-300 ring-1 ring-amber-500/30'}`}
+            >⏸</button>
+            <button
+              id="btn-stop"
+              onClick={handleStop}
+              title="Detener y reiniciar tiempo"
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold transition-all
+                bg-slate-800/50 text-slate-400 hover:bg-red-500/20 hover:text-red-400 ring-1 ring-slate-700/50"
+            >⏹</button>
+          </div>
+        </div>
+
+        {/* Hora Real */}
+        <div className="flex flex-col items-end justify-center shrink-0">
+          <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider leading-none mb-0.5">Hora actual</span>
+          <span className="text-sm font-mono text-slate-300 leading-none">
+            {horaReal.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+          </span>
+        </div>
+        <div className="w-px h-6 bg-slate-700/60 shrink-0" />
+
+        {/* Backend status */}
+        <div className={`text-[10px] flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border shrink-0
           ${backendActivo
             ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
             : 'bg-red-500/10 text-red-400 border-red-500/30'}`}>
           <div className={`w-1.5 h-1.5 rounded-full ${backendActivo ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
-          Backend: {backendActivo ? 'Conectado' : 'Offline'}
+          {backendActivo ? 'Conectado' : 'Offline'}
         </div>
       </header>
 
@@ -614,8 +579,8 @@ export default function Home() {
             selectedVuelo={vueloModal}
             umbralVerde={umbralVerde}
             umbralAmbar={umbralAmbar}
-            modoMapa={modoMapa}
-            onModoMapa={setModoMapa}
+            modoMapa="sa"
+            onModoMapa={() => {}}
             filtrosAviones={filtrosAvionesMapa}
           />
 
@@ -653,19 +618,11 @@ export default function Home() {
                 )}
                 {activeTab === 'simulacion' && (
                   <SimulacionPanel
-                    simDia={simDia}
-                    simTiempoMinutos={simHoraMinutos}
-                    fechaInicioRaw={fechaInicioRaw}
-                    isPlaying={isPlaying}
-                    rangoFinalizado={rangoFinalizado}
-                    onPlay={() => setIsPlaying(true)}
-                    onPause={() => setIsPlaying(false)}
-                    onStop={handleStop}
-                    onReiniciar={handleReiniciar}
                     umbralVerde={umbralVerde}
                     umbralAmbar={umbralAmbar}
                     onUmbralVerde={handleUmbralVerde}
                     onUmbralAmbar={handleUmbralAmbar}
+                    onReiniciar={handleReiniciar}
                   />
                 )}
                 {activeTab === 'pantalla' && (
@@ -678,11 +635,7 @@ export default function Home() {
                 {activeTab === 'vuelos' && (
                   <SidebarVuelos
                     vuelos={resultado.vuelosMaestros || []}
-                    cancelacionesPorDia={
-                      modoMapa === 'alns' 
-                        ? (resultado.cancelacionesPorDiaALNS || []) 
-                        : (resultado.cancelacionesPorDiaSA || [])
-                    }
+                    cancelacionesPorDia={resultado.cancelacionesPorDiaSA || []}
                     simDia={simDia}
                     maxDia={Math.max(0, (resultado.cancelacionesPorDiaSA?.length || 1) - 1)}
                   />

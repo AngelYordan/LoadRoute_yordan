@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useCallback } from 'react';
 import { ejecutarSimulacion } from '@/services/ruteoService';
-import { AlgoritmoSeleccion, RutaResponse, SimulacionJob } from '@/types/rutas';
+import { RutaResponse, SimulacionJob } from '@/types/rutas';
 
 interface ControlPanelProps {
   onResultado: (resultado: RutaResponse[]) => void;
@@ -22,63 +22,66 @@ const ESCENARIOS = [
   {
     id: 1,
     titulo: 'Simulación de Periodo',
-    subtitulo: 'Sin interrupciones — SA vs ALNS',
-    descripcion: 'Simulación completa del periodo sin cancelaciones. SA y ALNS compiten en condiciones ideales para establecer el baseline de rendimiento.',
+    subtitulo: 'Sin interrupciones — SA',
+    descripcion: 'Simulación completa del periodo sin cancelaciones. SA optimiza en condiciones ideales para establecer el baseline de rendimiento.',
     icono: '📊',
     color: 'cyan',
   },
   {
     id: 2,
     titulo: 'Operación Día a Día',
-    subtitulo: 'Baja interrupción — SA vs ALNS',
-    descripcion: 'Operación real con cancelación leve (~1% de vuelos/día). SA y ALNS replanifican diariamente. El estado de la red evoluciona progresivamente.',
+    subtitulo: 'Baja interrupción — SA',
+    descripcion: 'Operación real con cancelación leve (~1% de vuelos/día). SA replanifica diariamente. El estado de la red evoluciona progresivamente.',
     icono: '⚡',
     color: 'blue',
   },
   {
     id: 3,
     titulo: 'Operación de Colapso',
-    subtitulo: 'Cancelación agresiva — SA vs ALNS',
-    descripcion: 'Cancelación acumulativa del 5% de vuelos por día. SA y ALNS deben replanificar bajo estrés progresivo hasta alcanzar el punto de colapso.',
+    subtitulo: 'Cancelación agresiva — SA',
+    descripcion: 'Cancelación acumulativa del 5% de vuelos por día. SA replanifica bajo estrés progresivo hasta alcanzar el punto de colapso.',
     icono: '🔄',
     color: 'amber',
   },
 ];
 
 const FILE_CONFIGS = [
-  { key: 'aeropuertos', label: 'Aeropuertos', desc: 'Archivo de husos horarios', icon: '🏢', accept: '.txt' },
-  { key: 'vuelos', label: 'Planes de Vuelo', desc: 'planes_vuelo.txt', icon: '✈️', accept: '.txt' },
-  { key: 'envios', label: 'Envíos', desc: '_envios_XXXX_.txt', icon: '📦', accept: '.txt' },
+  { key: 'aeropuertos', label: 'Aeropuertos', desc: 'Husos horarios (.txt)', icon: '🏢', accept: '.txt' },
+  { key: 'vuelos',      label: 'Planes de Vuelo', desc: 'planes_vuelo.txt',  icon: '✈️', accept: '.txt' },
+  { key: 'envios',      label: 'Envíos', desc: '_envios_XXXX_.txt',          icon: '📦', accept: '.txt' },
 ];
 
-const ALGORITMOS: { id: AlgoritmoSeleccion; label: string; desc: string }[] = [
-  { id: 'ambos', label: 'SA + ALNS', desc: 'Ejecuta ambos algoritmos' },
-  { id: 'sa', label: 'Solo SA', desc: 'Simulated Annealing' },
-  { id: 'alns', label: 'Solo ALNS', desc: 'Adaptive Large Neighborhood Search' },
-];
-
-const DURACION_PERIODO_MIN = 10;
-const DURACION_PERIODO_MAX = 90;
+const DURACION_PERIODO_MIN  = 10;
+const DURACION_PERIODO_MAX  = 90;
 const DURACION_PERIODO_STEP = 5;
 
-/** Convierte 'YYYY-MM-DD' (HTML date input) a 'YYYYMMDD' (backend) */
 function toBackendDate(htmlDate: string): string {
   return htmlDate.replace(/-/g, '');
 }
 
+const colorMap: Record<string, string> = {
+  blue:  'border-blue-500/40 bg-blue-500/10 text-blue-400',
+  cyan:  'border-cyan-500/40 bg-cyan-500/10 text-cyan-400',
+  amber: 'border-amber-500/40 bg-amber-500/10 text-amber-400',
+};
+const colorMapActive: Record<string, string> = {
+  blue:  'border-blue-400 bg-blue-500/20 ring-1 ring-blue-400/30',
+  cyan:  'border-cyan-400 bg-cyan-500/20 ring-1 ring-cyan-400/30',
+  amber: 'border-amber-400 bg-amber-500/20 ring-1 ring-amber-400/30',
+};
+
 export default function ControlPanel({ onResultado, onError, onCargando, onFechaInicio, onDuracionSimulacion, onProgressJob }: ControlPanelProps) {
   const [archivos, setArchivos] = useState<Record<string, FileState>>({
     aeropuertos: { files: [], name: '' },
-    vuelos: { files: [], name: '' },
-    envios: { files: [], name: '' },
+    vuelos:      { files: [], name: '' },
+    envios:      { files: [], name: '' },
   });
-  const [escenario, setEscenario] = useState(1);
-  const [algoritmos, setAlgoritmos] = useState<AlgoritmoSeleccion>('ambos');
+  const [escenario,              setEscenario]              = useState(1);
   const [duracionPeriodoMinutos, setDuracionPeriodoMinutos] = useState(60);
-  const [fechaInicio, setFechaInicio] = useState('');
-  const [fechaFin, setFechaFin] = useState('');
-  const [ejecutando, setEjecutando] = useState(false);
-  const [progreso, setProgreso] = useState<SimulacionJob | null>(null);
+  const [fechaInicio,            setFechaInicio]            = useState('');
+  const [fechaFin,               setFechaFin]               = useState('');
+  const [ejecutando,             setEjecutando]             = useState(false);
+  const [progreso,               setProgreso]               = useState<SimulacionJob | null>(null);
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const handleFileChange = useCallback((key: string, e: React.ChangeEvent<HTMLInputElement>) => {
@@ -91,7 +94,7 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
     const textFiles = key === 'envios'
       ? filesArray.filter(f => /_envios_[A-Za-z]{4}_\.txt/i.test(f.name))
       : filesArray;
-    const name = textFiles.length > 1 ? `${textFiles.length} archivos cargados` : (textFiles[0]?.name || '');
+    const name = textFiles.length > 1 ? `${textFiles.length} archivos` : (textFiles[0]?.name || '');
     setArchivos(prev => ({ ...prev, [key]: { files: textFiles, name } }));
   }, []);
 
@@ -119,7 +122,7 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
         escenario,
         fechaInicio ? toBackendDate(fechaInicio) : undefined,
         fechaFin    ? toBackendDate(fechaFin)    : undefined,
-        escenario === 1 ? algoritmos : 'ambos',
+        'sa',
         (job) => {
           setProgreso(job);
           if (onProgressJob) onProgressJob(job);
@@ -136,189 +139,153 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
     }
   };
 
-  const colorMap: Record<string, string> = {
-    blue:  'border-blue-500/40 bg-blue-500/10 text-blue-400',
-    cyan:  'border-cyan-500/40 bg-cyan-500/10 text-cyan-400',
-    amber: 'border-amber-500/40 bg-amber-500/10 text-amber-400',
-  };
-  const colorMapActive: Record<string, string> = {
-    blue:  'border-blue-400 bg-blue-500/20 ring-1 ring-blue-400/30',
-    cyan:  'border-cyan-400 bg-cyan-500/20 ring-1 ring-cyan-400/30',
-    amber: 'border-amber-400 bg-amber-500/20 ring-1 ring-amber-400/30',
-  };
-
   return (
     <div className="space-y-5">
-      {/* Archivos de datos */}
-      <div>
-        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
-          Carga de Datos
-        </h3>
-        <div className="grid grid-cols-1 gap-3">
-          {FILE_CONFIGS.map(cfg => {
-            const state = archivos[cfg.key];
-            const hasFile = state.files.length > 0;
-            return (
-              <div
-                key={cfg.key}
-                onClick={() => fileRefs.current[cfg.key]?.click()}
-                className={`relative cursor-pointer rounded-lg border-2 border-dashed p-4 transition-all duration-200
-                  ${hasFile
-                    ? 'border-emerald-500/50 bg-emerald-500/5'
-                    : 'border-slate-600/50 bg-slate-800/30 hover:border-blue-500/40 hover:bg-blue-500/5'
-                  }`}
-              >
-                <input
-                  ref={el => { fileRefs.current[cfg.key] = el; }}
-                  type="file"
-                  accept={cfg.accept}
-                  onChange={(e) => handleFileChange(cfg.key, e)}
-                  multiple={cfg.key === 'envios'}
-                  {...(cfg.key === 'envios' ? { webkitdirectory: '' } : {})}
-                  className="hidden"
-                />
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">{hasFile ? '✅' : cfg.icon}</span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-slate-200">{cfg.label}</p>
-                    <p className="text-xs text-slate-400 truncate">
-                      {hasFile ? state.name : cfg.desc}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
 
-      {/* Filtro de fechas */}
-      <div>
-        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-          <span>📅</span> Filtro de Fechas
-          <span className="text-slate-600 font-normal normal-case tracking-normal">(opcional)</span>
-        </h3>
-        <div className="space-y-2">
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] text-slate-500 uppercase tracking-wider">Fecha Inicio</label>
-            <input
-              type="date"
-              value={fechaInicio}
-              onChange={e => handleFechaInicioChange(e.target.value)}
-              className="bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200
-                         focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/20
-                         [color-scheme:dark] transition-all"
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] text-slate-500 uppercase tracking-wider">Fecha Fin</label>
-            <input
-              type="date"
-              value={fechaFin}
-              min={fechaInicio}
-              onChange={e => setFechaFin(e.target.value)}
-              className="bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200
-                         focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/20
-                         [color-scheme:dark] transition-all"
-            />
-          </div>
-          {!fechaInicio && (
-            <p className="text-[10px] text-amber-400/80 flex items-center gap-1">
-              <span>⚠️</span> Sin fechas: procesa todos los envíos (puede ser lento)
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* Tipo de Simulación */}
+      {/* ── 1. Tipo de Simulación (arriba) ── */}
       <div>
         <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
           Tipo de Simulación
         </h3>
-        <div className="grid grid-cols-1 gap-3">
+        <div className="grid grid-cols-3 gap-2">
           {ESCENARIOS.map(esc => {
             const isActive = escenario === esc.id;
             return (
               <button
                 key={esc.id}
                 onClick={() => setEscenario(esc.id)}
-                className={`text-left rounded-lg border p-4 transition-all duration-200
-                  ${isActive ? colorMapActive[esc.color] : colorMap[esc.color]}
-                  hover:scale-[1.01]`}
+                className={`text-left rounded-lg border p-3 transition-all duration-200 hover:scale-[1.02]
+                  ${isActive ? colorMapActive[esc.color] : colorMap[esc.color]}`}
               >
-                <div className="flex items-start gap-2">
-                  <span className="text-xl mt-0.5">{esc.icono}</span>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-100">{esc.titulo}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">{esc.subtitulo}</p>
-                    {isActive && (
-                      <p className="text-xs text-slate-300 mt-2 leading-relaxed">{esc.descripcion}</p>
-                    )}
+                <div className="flex items-start gap-1.5">
+                  <span className="text-lg mt-0.5 shrink-0">{esc.icono}</span>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-slate-100 leading-tight">{esc.titulo}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5 leading-tight">{esc.subtitulo}</p>
                   </div>
                 </div>
+                {isActive && (
+                  <p className="text-[10px] text-slate-300 mt-2 leading-relaxed border-t border-slate-700/50 pt-2">
+                    {esc.descripcion}
+                  </p>
+                )}
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* Duración de periodo */}
-      {escenario === 1 && (
-        <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-4">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              Duración de Simulación
-            </h3>
-            <span className="shrink-0 rounded-md border border-cyan-400/30 bg-cyan-500/15 px-2.5 py-1 text-xs font-semibold text-cyan-100">
-              {duracionPeriodoMinutos} min
-            </span>
-          </div>
-          <input
-            type="range"
-            min={DURACION_PERIODO_MIN}
-            max={DURACION_PERIODO_MAX}
-            step={DURACION_PERIODO_STEP}
-            value={duracionPeriodoMinutos}
-            onChange={e => setDuracionPeriodoMinutos(Number(e.target.value))}
-            className="w-full cursor-pointer accent-cyan-400"
-          />
-          <div className="mt-2 flex justify-between text-[10px] font-medium text-slate-500">
-            <span>{DURACION_PERIODO_MIN} min</span>
-            <span>{DURACION_PERIODO_MAX} min</span>
-          </div>
-        </div>
-      )}
+      {/* ── 2. Dos columnas: Archivos | Fechas ── */}
+      <div className="grid grid-cols-2 gap-4">
 
-      {/* Algoritmo a ejecutar (solo periodo) */}
-      {escenario === 1 && (
+        {/* Columna izquierda: Archivos */}
         <div>
-          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
-            Algoritmo a Ejecutar
+          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+            <span>📁</span> Carga de Datos
           </h3>
-          <div className="grid grid-cols-3 gap-2">
-            {ALGORITMOS.map(opcion => {
-              const isActive = algoritmos === opcion.id;
+          <div className="space-y-2">
+            {FILE_CONFIGS.map(cfg => {
+              const state = archivos[cfg.key];
+              const hasFile = state.files.length > 0;
               return (
-                <button
-                  key={opcion.id}
-                  type="button"
-                  onClick={() => setAlgoritmos(opcion.id)}
-                  className={`rounded-lg border px-3 py-2 text-left transition-all
-                    ${isActive
-                      ? 'border-emerald-400 bg-emerald-500/20 text-emerald-100 ring-1 ring-emerald-400/30'
-                      : 'border-slate-700 bg-slate-800/40 text-slate-400 hover:border-slate-500 hover:text-slate-200'
+                <div
+                  key={cfg.key}
+                  onClick={() => fileRefs.current[cfg.key]?.click()}
+                  className={`relative cursor-pointer rounded-lg border-2 border-dashed px-3 py-2.5 transition-all duration-200
+                    ${hasFile
+                      ? 'border-emerald-500/50 bg-emerald-500/5'
+                      : 'border-slate-600/50 bg-slate-800/30 hover:border-blue-500/40 hover:bg-blue-500/5'
                     }`}
                 >
-                  <p className="text-xs font-semibold">{opcion.label}</p>
-                  <p className="mt-1 text-[10px] leading-tight opacity-80">{opcion.desc}</p>
-                </button>
+                  <input
+                    ref={el => { fileRefs.current[cfg.key] = el; }}
+                    type="file"
+                    accept={cfg.accept}
+                    onChange={(e) => handleFileChange(cfg.key, e)}
+                    multiple={cfg.key === 'envios'}
+                    {...(cfg.key === 'envios' ? { webkitdirectory: '' } : {})}
+                    className="hidden"
+                  />
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg shrink-0">{hasFile ? '✅' : cfg.icon}</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium text-slate-200 leading-tight">{cfg.label}</p>
+                      <p className="text-[10px] text-slate-400 truncate leading-tight mt-0.5">
+                        {hasFile ? state.name : cfg.desc}
+                      </p>
+                    </div>
+                  </div>
+                </div>
               );
             })}
           </div>
         </div>
-      )}
 
-      {/* Botón Ejecutar */}
+        {/* Columna derecha: Fechas + Duración */}
+        <div className="flex flex-col gap-3">
+          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+            <span>📅</span> Periodo
+            <span className="text-slate-600 font-normal normal-case tracking-normal">(opcional)</span>
+          </h3>
+          <div className="space-y-2">
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-slate-500 uppercase tracking-wider">Inicio</label>
+              <input
+                type="date"
+                value={fechaInicio}
+                onChange={e => handleFechaInicioChange(e.target.value)}
+                className="bg-slate-800/50 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-200
+                           focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/20
+                           [color-scheme:dark] transition-all"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-slate-500 uppercase tracking-wider">Fin</label>
+              <input
+                type="date"
+                value={fechaFin}
+                min={fechaInicio}
+                onChange={e => setFechaFin(e.target.value)}
+                className="bg-slate-800/50 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-200
+                           focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/20
+                           [color-scheme:dark] transition-all"
+              />
+            </div>
+            {!fechaInicio && (
+              <p className="text-[10px] text-amber-400/80 flex items-center gap-1">
+                <span>⚠️</span> Sin fechas: todos los envíos
+              </p>
+            )}
+          </div>
+
+          {/* Duración (solo escenario 1) */}
+          {escenario === 1 && (
+            <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3 mt-1">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Duración Anim.</span>
+                <span className="text-xs font-bold text-cyan-100 bg-cyan-500/15 border border-cyan-400/30 px-2 py-0.5 rounded">
+                  {duracionPeriodoMinutos} min
+                </span>
+              </div>
+              <input
+                type="range"
+                min={DURACION_PERIODO_MIN}
+                max={DURACION_PERIODO_MAX}
+                step={DURACION_PERIODO_STEP}
+                value={duracionPeriodoMinutos}
+                onChange={e => setDuracionPeriodoMinutos(Number(e.target.value))}
+                className="w-full cursor-pointer accent-cyan-400"
+              />
+              <div className="flex justify-between text-[9px] font-medium text-slate-500 mt-1">
+                <span>{DURACION_PERIODO_MIN}m</span>
+                <span>{DURACION_PERIODO_MAX}m</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── 3. Botón Ejecutar ── */}
       <button
         onClick={handleEjecutar}
         disabled={!todosArchivosListos || ejecutando}
@@ -336,7 +303,7 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
         ) : (
           <>
             <span>▶</span>
-            Ejecutar Simulación — Escenario {escenario}
+            Ejecutar — Escenario {escenario}
           </>
         )}
       </button>
@@ -345,9 +312,9 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
         <div className="rounded-lg border border-blue-500/20 bg-blue-500/10 p-3">
           <div className="flex items-center justify-between gap-3 text-xs">
             <span className="text-blue-100 truncate">{progreso.message}</span>
-            <span className="font-mono text-blue-300">{progreso.progress}%</span>
+            <span className="font-mono text-blue-300 shrink-0">{progreso.progress}%</span>
           </div>
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-800">
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-800">
             <div
               className="h-full rounded-full bg-blue-400 transition-all duration-300"
               style={{ width: `${progreso.progress}%` }}

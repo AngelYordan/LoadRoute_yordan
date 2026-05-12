@@ -106,16 +106,34 @@ function crearIconoAeropuerto(color: string): L.DivIcon {
   });
 }
 
+type StatsAeropuerto = { salidas: number; llegadas: number; enTransito: number; };
+
+function calcularStatsAeropuertos(rutas: RutaMuestra[]): Record<string, StatsAeropuerto> {
+  const stats: Record<string, StatsAeropuerto> = {};
+  const get = (c: string) => stats[c] ?? (stats[c] = { salidas: 0, llegadas: 0, enTransito: 0 });
+  for (const ruta of rutas) {
+    if (!ruta.tramos || ruta.tramos.length === 0) continue;
+    get(ruta.origen).salidas++;
+    get(ruta.destino ?? ruta.tramos[ruta.tramos.length - 1]?.destino).llegadas++;
+    for (let i = 1; i < ruta.tramos.length - 1; i++) {
+      get(ruta.tramos[i].destino).enTransito++;
+    }
+  }
+  return stats;
+}
+
 const AirportMarker: React.FC<{
   aeropuerto: AeropuertoDTO;
   cargaActual: number;
   umbralVerde: number;
   umbralAmbar: number;
+  stats?: StatsAeropuerto;
 }> = React.memo(function AirportMarker({
   aeropuerto,
   cargaActual,
   umbralVerde,
   umbralAmbar,
+  stats,
 }) {
   const pct = aeropuerto.capacidadMax > 0
     ? Math.round((cargaActual / aeropuerto.capacidadMax) * 100)
@@ -134,10 +152,22 @@ const AirportMarker: React.FC<{
       icon={icon}
     >
       <Tooltip direction="top" offset={[0, -8]} className="airport-tooltip">
-        <div style={{ fontSize: '11px', lineHeight: 1.4 }}>
-          <strong>{aeropuerto.codigo}</strong> — {aeropuerto.ciudad}<br/>
-          {aeropuerto.pais} | GMT{aeropuerto.gmt >= 0 ? '+' : ''}{aeropuerto.gmt}<br/>
-          Carga: {cargaActual}/{aeropuerto.capacidadMax} ({pct}%)
+        <div style={{ fontSize: '11px', lineHeight: 1.5, minWidth: '160px' }}>
+          <strong style={{ fontSize: '13px' }}>{aeropuerto.codigo}</strong>
+          <span style={{ color: '#94a3b8', marginLeft: '4px' }}>{aeropuerto.ciudad}</span>
+          <br/>
+          <span style={{ color: '#64748b' }}>{aeropuerto.pais} | GMT{aeropuerto.gmt >= 0 ? '+' : ''}{aeropuerto.gmt}</span>
+          <hr style={{ borderColor: '#334155', margin: '4px 0' }} />
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            <span>🗃️ <strong>{cargaActual}</strong>/{aeropuerto.capacidadMax} ({pct}%)</span>
+          </div>
+          {stats && (
+            <div style={{ marginTop: '4px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {stats.salidas > 0 && <span style={{ color: '#4ade80' }}>↑ {stats.salidas} salen</span>}
+              {stats.llegadas > 0 && <span style={{ color: '#60a5fa' }}>↓ {stats.llegadas} llegan</span>}
+              {stats.enTransito > 0 && <span style={{ color: '#f59e0b' }}>⟷ {stats.enTransito} tránsito</span>}
+            </div>
+          )}
         </div>
       </Tooltip>
     </Marker>
@@ -191,11 +221,12 @@ export default function MapaRutas({
   const aeropuertos = resultado?.aeropuertos || [];
   const resultadoSA = resultado?.resultadoSA;
   const resultadoALNS = resultado?.resultadoALNS;
-  const mostrarSA = modoMapa === 'sa' || modoMapa === 'ambos' || !resultadoALNS;
-  const mostrarALNS = modoMapa === 'alns' || modoMapa === 'ambos';
+  const mostrarSA = true;
+  const mostrarALNS = false;
 
   const rutasMuestraSA = useMemo(() => resultadoSA?.rutasMuestra || [], [resultadoSA?.rutasMuestra]);
   const rutasMuestraALNS = useMemo(() => resultadoALNS?.rutasMuestra || [], [resultadoALNS?.rutasMuestra]);
+  const statsAeropuertos = useMemo(() => calcularStatsAeropuertos(rutasMuestraSA), [rutasMuestraSA]);
   const tramosSA = useMemo(() => rutasMuestraSA.flatMap(r => r.tramos), [rutasMuestraSA]);
   const tramosALNS = useMemo(() => rutasMuestraALNS.flatMap(r => r.tramos), [rutasMuestraALNS]);
   const tramosVisiblesSA = useMemo(
@@ -245,23 +276,7 @@ export default function MapaRutas({
 
   return (
     <div className="w-full h-full relative overflow-hidden">
-      {/* Toggle SA/ALNS — z-[600] para quedar sobre paneles flotantes */}
-      <div className="absolute left-4 top-4 z-[600] flex overflow-hidden rounded-lg border border-slate-700/60 bg-[#0c1a30]/95 shadow-xl">
-        {([
-          ['sa', 'SA'],
-          ['alns', 'ALNS'],
-          ['ambos', 'Ambos'],
-        ] as const).map(([modo, label]) => (
-          <button
-            key={modo}
-            onClick={() => onModoMapa(modo)}
-            className={`px-3 py-2 text-xs font-semibold transition-colors
-              ${modoMapa === modo ? 'bg-blue-500 text-white' : 'text-slate-300 hover:bg-slate-700/70'}`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+
       <MapContainer
         center={[20, 30]}
         zoom={3}
@@ -301,6 +316,7 @@ export default function MapaRutas({
             cargaActual={cargasAeropuertos[a.codigo] || 0}
             umbralVerde={umbralVerde}
             umbralAmbar={umbralAmbar}
+            stats={statsAeropuertos[a.codigo]}
           />
         ))}
 

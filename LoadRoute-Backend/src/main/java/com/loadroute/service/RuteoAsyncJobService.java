@@ -43,8 +43,7 @@ public class RuteoAsyncJobService {
                                     List<MultipartFile> enviosFiles,
                                     int escenario,
                                     String fechaInicio,
-                                    String fechaFin,
-                                    String algoritmos) throws IOException {
+                                    String fechaFin) throws IOException {
         cleanupExpiredJobs();
 
         String jobId = UUID.randomUUID().toString();
@@ -88,7 +87,6 @@ public class RuteoAsyncJobService {
                             escenario,
                             fechaInicio,
                             fechaFin,
-                            algoritmos,
                             new RuteoAlgoritmoService.ProgressReporter() {
                                 @Override
                                 public void update(int progress, String message) {
