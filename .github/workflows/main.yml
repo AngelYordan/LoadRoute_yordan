@@ -27,17 +27,19 @@ jobs:
             # 2. Bajar los últimos cambios de GitHub
             git pull origin main
 
-            # 3. DESPLIEGUE DEL FRONTEND (Next.js)
+            # 3. DESPLIEGUE DEL FRONTEND (Next.js - Modo Estático Especializado)
             echo "Iniciando despliegue de Frontend (Next.js)..."
             cd LoadRoute-Frontend
             npm install
             
-            # Detección en tiempo real de la IP pública del Front
-            ACTUAL_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
-            echo "La IP pública detectada para el cliente es: $ACTUAL_IP"
+            # Limpiamos compilaciones anteriores
+            rm -rf .next out
             
-            NEXT_PUBLIC_BACKEND_URL="http://$ACTUAL_IP" NODE_ENV=production npm run build
-            NEXT_PUBLIC_BACKEND_URL="http://$ACTUAL_IP" PORT=3000 pm2 restart loadroute-front || NEXT_PUBLIC_BACKEND_URL="http://$ACTUAL_IP" PORT=3000 pm2 start npm --name "loadroute-front" -- start
+            # Usamos la ruta relativa "/api". Así Nginx procesa todo en el puerto 80 sin importar la IP externa.
+            NEXT_PUBLIC_BACKEND_URL="/api" NODE_ENV=production npm run build
+            
+            # Reiniciamos PM2 usando la herramienta de servicio estático 'serve' en el puerto 3000
+            pm2 restart loadroute-front || pm2 start serve --name "loadroute-front" -- -s out -l 3000
             pm2 save
             cd ..
 
@@ -45,7 +47,7 @@ jobs:
             echo "Iniciando despliegue de Backend (Java)..."
             cd LoadRoute-Backend
             
-            # Forzamos la creación del archivo .env con la IP dinámica de la BD de hoy
+            # Forzamos la creación del archivo .env con la IP privada de la BD del secreto de hoy
             echo "Generando archivo .env dinámico..."
             rm -f .env
             echo "DB_URL=jdbc:mysql://${{ secrets.DB_HOST }}:3306/loadroute?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&rewriteBatchedStatements=true" > .env
@@ -55,7 +57,7 @@ jobs:
             # Compilar usando el Maven del servidor
             mvn clean package -DskipTests
             
-            # Reiniciar el backend para que cargue el nuevo archivo .env
+            # Reiniciar el backend para que cargue el nuevo archivo .env e impacte el cambio de BD
             sudo systemctl restart loadroute-backend.service
             
             echo "¡Despliegue de LoadRoute completado con éxito!"
