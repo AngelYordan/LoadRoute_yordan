@@ -14,9 +14,9 @@ import { AlgoritmoSeleccion, RutaResponse, SimulacionJob } from '@/types/rutas';
  * Ejecuta la simulación subiendo los 3 archivos de datos al backend.
  */
 export async function ejecutarSimulacion(
-  aeropuertosFile: File,
-  vuelosFile: File,
-  enviosFiles: File[],
+  aeropuertosFile: File | undefined,
+  vuelosFile: File | undefined,
+  enviosFiles: File[] | undefined,
   escenario: number,
   fechaInicio?: string,  // formato YYYYMMDD, opcional
   fechaFin?: string,     // formato YYYYMMDD, opcional
@@ -38,9 +38,9 @@ export async function ejecutarSimulacion(
 }
 
 export async function iniciarSimulacion(
-  aeropuertosFile: File,
-  vuelosFile: File,
-  enviosFiles: File[],
+  aeropuertosFile: File | undefined,
+  vuelosFile: File | undefined,
+  enviosFiles: File[] | undefined,
   escenario: number,
   fechaInicio?: string,
   fechaFin?: string,
@@ -48,16 +48,22 @@ export async function iniciarSimulacion(
 ): Promise<SimulacionJob> {
   const formData = new FormData();
   // Nombres de campo deben coincidir con @RequestPart del controlador
-  formData.append('aeropuertosFile', aeropuertosFile);
-  formData.append('vuelosFile', vuelosFile);
-  enviosFiles.forEach(file => {
-    formData.append('enviosFiles', file);
-  });
+  if (aeropuertosFile) {
+    formData.append('aeropuertosFile', aeropuertosFile);
+  }
+  if (vuelosFile) {
+    formData.append('vuelosFile', vuelosFile);
+  }
+  if (enviosFiles) {
+    enviosFiles.forEach(file => {
+      formData.append('enviosFiles', file);
+    });
+  }
 
   // Los @RequestParam van en la URL, no en el body multipart
   const params = new URLSearchParams({ escenario: String(escenario) });
   if (fechaInicio) params.set('fechaInicio', fechaInicio);
-  if (fechaFin)    params.set('fechaFin', fechaFin);
+  if (fechaFin) params.set('fechaFin', fechaFin);
   params.set('algoritmos', algoritmos);
 
   const response = await fetch(`${API_ENDPOINTS.SIMULAR_ASYNC}?${params.toString()}`, {

@@ -2,6 +2,7 @@ package com.loadroute.controller;
 
 import com.loadroute.dto.RutaResponseDTO;
 import com.loadroute.dto.SimulacionJobDTO;
+import com.loadroute.service.CargaDatosService;
 import com.loadroute.service.RuteoAsyncJobService;
 import com.loadroute.service.RuteoAlgoritmoService;
 import org.springframework.http.ResponseEntity;
@@ -22,10 +23,14 @@ public class RutasController {
 
     private final RuteoAlgoritmoService ruteoService;
     private final RuteoAsyncJobService asyncJobService;
+    private final CargaDatosService cargaDatosService;
 
-    public RutasController(RuteoAlgoritmoService ruteoService, RuteoAsyncJobService asyncJobService) {
+    public RutasController(RuteoAlgoritmoService ruteoService,
+                           RuteoAsyncJobService asyncJobService,
+                           CargaDatosService cargaDatosService) {
         this.ruteoService = ruteoService;
         this.asyncJobService = asyncJobService;
+        this.cargaDatosService = cargaDatosService;
     }
 
     @GetMapping("/health")
@@ -35,17 +40,20 @@ public class RutasController {
 
     @PostMapping("/simular")
     public ResponseEntity<List<RutaResponseDTO>> simular(
-            @RequestPart("aeropuertosFile") MultipartFile aeropuertosFile,
-            @RequestPart("vuelosFile")      MultipartFile vuelosFile,
-            @RequestPart("enviosFiles")     List<MultipartFile> enviosFiles,
+            @RequestPart(value = "aeropuertosFile", required = false) MultipartFile aeropuertosFile,
+            @RequestPart(value = "vuelosFile", required = false)      MultipartFile vuelosFile,
+            @RequestPart(value = "enviosFiles", required = false)     List<MultipartFile> enviosFiles,
             @RequestParam(value = "escenario",   defaultValue = "1") int escenario,
             @RequestParam(value = "fechaInicio", required = false)    String fechaInicio,
             @RequestParam(value = "fechaFin",    required = false)    String fechaFin
     ) throws IOException {
+        procesarArchivos(aeropuertosFile, vuelosFile, enviosFiles);
+        validarDatos();
+
         List<RutaResponseDTO> response = ruteoService.ejecutarRuteo(
-                aeropuertosFile.getInputStream(),
-                vuelosFile.getInputStream(),
-                enviosFiles,
+                null,
+                null,
+                null,
                 escenario,
                 fechaInicio,
                 fechaFin
@@ -55,17 +63,17 @@ public class RutasController {
 
     @PostMapping("/simular-async")
     public ResponseEntity<SimulacionJobDTO> simularAsync(
-            @RequestPart("aeropuertosFile") MultipartFile aeropuertosFile,
-            @RequestPart("vuelosFile")      MultipartFile vuelosFile,
-            @RequestPart("enviosFiles")     List<MultipartFile> enviosFiles,
+            @RequestPart(value = "aeropuertosFile", required = false) MultipartFile aeropuertosFile,
+            @RequestPart(value = "vuelosFile", required = false)      MultipartFile vuelosFile,
+            @RequestPart(value = "enviosFiles", required = false)     List<MultipartFile> enviosFiles,
             @RequestParam(value = "escenario",   defaultValue = "1") int escenario,
             @RequestParam(value = "fechaInicio", required = false)    String fechaInicio,
             @RequestParam(value = "fechaFin",    required = false)    String fechaFin
     ) throws IOException {
+        procesarArchivos(aeropuertosFile, vuelosFile, enviosFiles);
+        validarDatos();
+
         return ResponseEntity.ok(asyncJobService.iniciar(
-                aeropuertosFile,
-                vuelosFile,
-                enviosFiles,
                 escenario,
                 fechaInicio,
                 fechaFin
@@ -92,5 +100,45 @@ public class RutasController {
         return asyncJobService.eliminar(jobId)
                 ? ResponseEntity.noContent().build()
                 : ResponseEntity.notFound().build();
+    }
+
+    // ── Métodos Auxiliares para el procesamiento de archivos ──────────────────
+
+    private void procesarArchivos(MultipartFile aeropuertosFile,
+                                  MultipartFile vuelosFile,
+                                  List<MultipartFile> enviosFiles) throws IOException {
+        if (isFilePresent(aeropuertosFile)) {
+            cargaDatosService.guardarOReemplazarAeropuertos(aeropuertosFile.getInputStream());
+        }
+        if (isFilePresent(vuelosFile)) {
+            cargaDatosService.guardarOReemplazarVuelos(vuelosFile.getInputStream());
+        }
+        if (isFileListPresent(enviosFiles)) {
+            cargaDatosService.guardarOReemplazarEnvios(enviosFiles);
+        }
+    }
+
+    private void validarDatos() {
+        if (!cargaDatosService.tieneAeropuertos()) {
+            throw new IllegalArgumentException("No hay aeropuertos registrados en la base de datos y no se subió ningún archivo.");
+        }
+        if (!cargaDatosService.tieneVuelos()) {
+            throw new IllegalArgumentException("No hay vuelos registrados en la base de datos y no se subió ningún archivo.");
+        }
+        if (!cargaDatosService.tieneEnvios()) {
+            throw new IllegalArgumentException("No hay envíos registrados en la base de datos y no se subió ningún archivo.");
+        }
+    }
+
+    private boolean isFilePresent(MultipartFile file) {
+        return file != null && !file.isEmpty() && file.getOriginalFilename() != null && !file.getOriginalFilename().trim().isEmpty();
+    }
+
+    private boolean isFileListPresent(List<MultipartFile> files) {
+        if (files == null || files.isEmpty()) return false;
+        for (MultipartFile file : files) {
+            if (isFilePresent(file)) return true;
+        }
+        return false;
     }
 }

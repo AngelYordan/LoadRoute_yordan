@@ -38,75 +38,44 @@ public class RuteoAsyncJobService {
         cleanupExecutor.scheduleAtFixedRate(this::cleanupExpiredJobs, 5, 5, TimeUnit.MINUTES);
     }
 
-    public SimulacionJobDTO iniciar(MultipartFile aeropuertosFile,
-                                    MultipartFile vuelosFile,
-                                    List<MultipartFile> enviosFiles,
-                                    int escenario,
+    public SimulacionJobDTO iniciar(int escenario,
                                     String fechaInicio,
-                                    String fechaFin) throws IOException {
+                                    String fechaFin) {
         cleanupExpiredJobs();
 
         String jobId = UUID.randomUUID().toString();
-        SimulacionJobDTO job = new SimulacionJobDTO(jobId, "PENDING", 0, "Preparando archivos...");
+        SimulacionJobDTO job = new SimulacionJobDTO(jobId, "PENDING", 0, "Iniciando simulacion...");
         jobs.put(jobId, job);
 
-        Path jobDir = Files.createTempDirectory("loadroute-" + jobId + "-");
-        Path aeropuertosPath;
-        Path vuelosPath;
-        List<MultipartFile> enviosTemp = new ArrayList<>();
-        try {
-            aeropuertosPath = persistMultipart(jobDir, aeropuertosFile, "aeropuertos.txt");
-            vuelosPath = persistMultipart(jobDir, vuelosFile, "vuelos.txt");
-            Path enviosDir = Files.createDirectories(jobDir.resolve("envios"));
-            int index = 0;
-            for (MultipartFile file : enviosFiles) {
-                Path path = persistMultipart(enviosDir, file, "envios-" + index + ".txt");
-                enviosTemp.add(new TempMultipartFile(
-                        file.getName(),
-                        file.getOriginalFilename(),
-                        file.getContentType(),
-                        path
-                ));
-                index++;
-            }
-        } catch (IOException e) {
-            jobs.remove(jobId);
-            deleteRecursively(jobDir);
-            throw e;
-        }
-
         executor.submit(() -> {
-            update(jobId, "RUNNING", 5, "Archivos recibidos. Iniciando simulacion...");
+            update(jobId, "RUNNING", 5, "Cargando datos e iniciando simulacion...");
             try {
-                try (InputStream aeropuertosIS = Files.newInputStream(aeropuertosPath);
-                     InputStream vuelosIS = Files.newInputStream(vuelosPath)) {
-                    List<RutaResponseDTO> returnedChunks = ruteoService.ejecutarRuteo(
-                            aeropuertosIS,
-                            vuelosIS,
-                            enviosTemp,
-                            escenario,
-                            fechaInicio,
-                            fechaFin,
-                            new RuteoAlgoritmoService.ProgressReporter() {
-                                @Override
-                                public void update(int progress, String message) {
-                                    RuteoAsyncJobService.this.update(jobId, "RUNNING", progress, message);
-                                }
-                                @Override
-                                public void onChunk(RutaResponseDTO chunk) {
-                                    SimulacionJobDTO current = jobs.get(jobId);
-                                    if (current != null) {
-                                        current.addChunk(chunk);
-                                    }
+                List<RutaResponseDTO> returnedChunks = ruteoService.ejecutarRuteo(
+                        null,
+                        null,
+                        null,
+                        escenario,
+                        fechaInicio,
+                        fechaFin,
+                        new RuteoAlgoritmoService.ProgressReporter() {
+                            @Override
+                            public void update(int progress, String message) {
+                                RuteoAsyncJobService.this.update(jobId, "RUNNING", progress, message);
+                            }
+                            @Override
+                            public void onChunk(RutaResponseDTO chunk) {
+                                SimulacionJobDTO current = jobs.get(jobId);
+                                if (current != null) {
+                                    current.addChunk(chunk);
                                 }
                             }
-                    );
-                    SimulacionJobDTO current = jobs.get(jobId);
-                    if (current != null && current.getChunks().isEmpty() && returnedChunks != null) {
-                        for (RutaResponseDTO chunk : returnedChunks) current.addChunk(chunk);
-                    }
-                }
+                        }
+                );
                 SimulacionJobDTO current = jobs.get(jobId);
+                if (current != null && current.getChunks().isEmpty() && returnedChunks != null) {
+                    for (RutaResponseDTO chunk : returnedChunks) current.addChunk(chunk);
+                }
+                current = jobs.get(jobId);
                 if (current != null) {
                     current.setStatus("DONE");
                     current.setProgress(100);
@@ -122,8 +91,6 @@ public class RuteoAsyncJobService {
                     current.setError(e.getMessage());
                     finishedAt.put(jobId, System.currentTimeMillis());
                 }
-            } finally {
-                deleteRecursively(jobDir);
             }
         });
 

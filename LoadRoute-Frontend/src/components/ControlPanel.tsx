@@ -103,12 +103,7 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
     if (onFechaInicio) onFechaInicio(val ? toBackendDate(val) : '');
   };
 
-  const todosArchivosListos = archivos.aeropuertos.files.length > 0 &&
-    archivos.vuelos.files.length > 0 &&
-    archivos.envios.files.length > 0;
-
   const handleEjecutar = async () => {
-    if (!todosArchivosListos) return;
     setEjecutando(true);
     onCargando(true);
     onError('');
@@ -181,7 +176,7 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
         {/* Columna izquierda: Archivos */}
         <div>
           <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-            <span>📁</span> Carga de Datos
+            <span>📁</span> Carga de Datos <span className="text-slate-600 font-normal normal-case tracking-normal text-[10px] ml-1">(opcional)</span>
           </h3>
           <div className="space-y-2">
             {FILE_CONFIGS.map(cfg => {
@@ -288,9 +283,9 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
       {/* ── 3. Botón Ejecutar ── */}
       <button
         onClick={handleEjecutar}
-        disabled={!todosArchivosListos || ejecutando}
+        disabled={ejecutando}
         className={`w-full py-3.5 rounded-lg font-semibold text-sm transition-all duration-300 flex items-center justify-center gap-2
-          ${todosArchivosListos && !ejecutando
+          ${!ejecutando
             ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20 hover:shadow-blue-500/30'
             : 'bg-slate-700/50 text-slate-500 cursor-not-allowed'
           }`}

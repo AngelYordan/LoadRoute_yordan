@@ -3,6 +3,7 @@ package com.loadroute.service;
 import com.loadroute.algorithm.*;
 import com.loadroute.algorithm.graph.RedLogistica;
 import com.loadroute.algorithm.model.*;
+import com.loadroute.algorithm.model.SolucionEstado;
 import com.loadroute.algorithm.parser.Parsers;
 import com.loadroute.dto.RutaResponseDTO;
 import com.loadroute.dto.RutaResponseDTO.*;
@@ -28,6 +29,12 @@ import java.util.stream.Collectors;
 public class RuteoAlgoritmoService {
 
     private static final Logger LOG = Logger.getLogger(RuteoAlgoritmoService.class.getName());
+
+    private final CargaDatosService cargaDatosService;
+
+    public RuteoAlgoritmoService(CargaDatosService cargaDatosService) {
+        this.cargaDatosService = cargaDatosService;
+    }
 
     @FunctionalInterface
     public interface ProgressReporter {
@@ -55,18 +62,37 @@ public class RuteoAlgoritmoService {
                                           String fechaInicio,
                                           String fechaFin,
                                           ProgressReporter progress) throws IOException {
-        report(progress, 8, "Parseando archivos de datos...");
-        LOG.info("Parseando archivos de datos...");
-        Map<String, Aeropuerto> aeropuertos = Parsers.parsearAeropuertos(aeropuertosIS);
-        List<Vuelo>             vuelos      = Parsers.parsearVuelos(vuelosIS, aeropuertos);
+        report(progress, 8, "Cargando datos...");
+        LOG.info("Cargando datos para el algoritmo...");
+
+        Map<String, Aeropuerto> aeropuertos;
+        if (aeropuertosIS != null) {
+            aeropuertos = Parsers.parsearAeropuertos(aeropuertosIS);
+        } else {
+            aeropuertos = cargaDatosService.obtenerAeropuertosDeBDComoModelos();
+        }
+
+        List<Vuelo> vuelos;
+        if (vuelosIS != null) {
+            vuelos = Parsers.parsearVuelos(vuelosIS, aeropuertos);
+        } else {
+            vuelos = cargaDatosService.obtenerVuelosDeBDComoModelos(aeropuertos);
+        }
+
         report(progress, 18, "Aeropuertos y vuelos cargados. Leyendo envios...");
 
         LocalDateTime inicioFiltro = fechaInicio != null ? parsearFechaInicio(fechaInicio) : null;
         LocalDateTime finFiltro    = fechaFin    != null ? parsearFechaFin(fechaFin)       : null;
         Map<String, Envio> envios  = new LinkedHashMap<>();
-        for (MultipartFile file : enviosFiles) {
-            String filename = file.getOriginalFilename() != null ? file.getOriginalFilename() : "_envios_XXXX_.txt";
-            envios.putAll(Parsers.parsearEnvios(file.getInputStream(), filename, aeropuertos, 0, inicioFiltro, finFiltro));
+        if (enviosFiles != null && !enviosFiles.isEmpty() && !(enviosFiles.size() == 1 && enviosFiles.get(0).isEmpty())) {
+            for (MultipartFile file : enviosFiles) {
+                String filename = file.getOriginalFilename() != null ? file.getOriginalFilename() : "_envios_XXXX_.txt";
+                envios.putAll(Parsers.parsearEnvios(file.getInputStream(), filename, aeropuertos, 0, inicioFiltro, finFiltro));
+            }
+        } else {
+            LocalDateTime inicio = parsearFechaInicio(fechaInicio);
+            LocalDateTime fin    = parsearFechaFin(fechaFin);
+            envios = cargaDatosService.obtenerEnviosDeBDComoModelosEnRango(aeropuertos, inicio, fin);
         }
 
         report(progress, 30, String.format("Filtro aplicado: %d envios en el rango.", envios.size()));
