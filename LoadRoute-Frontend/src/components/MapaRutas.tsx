@@ -36,13 +36,14 @@ interface MapaRutasProps {
   filtrosAviones?: FiltrosAvionesMapa;
 }
 
-// Semáforo dinámico de Aeropuertos (por % de ocupación real)
-function getAirportColor(cargaActual: number, capacidadMax: number, umbralVerde: number, umbralAmbar: number): string {
-  if (capacidadMax <= 0) return '#10b981';
-  const p = (cargaActual / capacidadMax) * 100;
-  if (p <= umbralVerde) return '#10b981';
-  if (p <= umbralAmbar) return '#f59e0b';
-  return '#ef4444';
+// Color fijo para aeropuertos: azul del header en operación normal, rojo en colapso
+const AIRPORT_BLUE = '#3b82f6';
+const AIRPORT_COLLAPSE_RED = '#ef4444';
+
+function isAirportCollapsed(cargaActual: number, capacidadMax: number): boolean {
+  if (capacidadMax <= 0) return false;
+  // Colapso ahora ocurre al 70% o más de la capacidad
+  return cargaActual >= capacidadMax * 0.7;
 }
 
 // Semáforo dinámico de Aviones
@@ -86,23 +87,27 @@ function crearIconoAvion(color: string, angle: number): L.DivIcon {
   });
 }
 
-function crearIconoAeropuerto(color: string): L.DivIcon {
+function crearIconoAeropuerto(collapsed: boolean): L.DivIcon {
+  const color = collapsed ? AIRPORT_COLLAPSE_RED : AIRPORT_BLUE;
+  
+  // Nuevo diseño: un círculo moderno con un icono minimalista de torre de control/edificio
   const svg = encodeURIComponent(`
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 76">
-      <path fill="${color}" stroke="white" stroke-width="2.2"
-        d="M32 2C18.2 2 7 13.1 7 26.9 7 44.3 32 74 32 74s25-29.7 25-47.1C57 13.1 45.8 2 32 2z"/>
-      <g transform="translate(32 29) rotate(-38) scale(.92) translate(-16 -16)">
-        <path fill="white"
-          d="M30 16c0 .85-.62 1.56-1.46 1.7l-9.36 1.47-4.86 9.1c-.34.64-1.2.75-1.7.22l-2.17-2.28 2.73-6.08-5.78.84-2.9 2.95c-.36.36-.9.45-1.36.22l-1.1-.55 2.18-5.43v-4.32L2.04 8.41l1.1-.55c.46-.23 1-.14 1.36.22l2.9 2.95 5.78.84-2.73-6.08 2.17-2.28c.5-.53 1.36-.42 1.7.22l4.86 9.1 9.36 1.47c.84.14 1.46.85 1.46 1.7z"/>
-      </g>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+      <circle cx="32" cy="32" r="28" fill="${color}" stroke="white" stroke-width="4" />
+      <path fill="white" d="M24 42V26l8-8 8 8v16H24zm4-12v4h8v-4h-8z"/>
     </svg>
   `);
 
+  const extraClass = collapsed ? ' airport-collapse-pulse' : '';
+
   return L.divIcon({
-    className: 'loadroute-airport-marker',
-    html: `<div style="width:34px;height:40px;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.45));background:url('data:image/svg+xml,${svg}') center/contain no-repeat;"></div>`,
-    iconSize: [34, 40],
-    iconAnchor: [17, 39],
+    className: `loadroute-airport-marker${extraClass}`,
+    html: `<div style="width:30px;height:30px;background:url('data:image/svg+xml,${svg}') center/contain no-repeat; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5)); z-index: 5000;"></div>`,
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+    // Forzar zIndex alto en el marker
+    zIndex: 5000,
+    zIndexOffset: 5000,
   });
 }
 
@@ -125,26 +130,17 @@ function calcularStatsAeropuertos(rutas: RutaMuestra[]): Record<string, StatsAer
 const AirportMarker: React.FC<{
   aeropuerto: AeropuertoDTO;
   cargaActual: number;
-  umbralVerde: number;
-  umbralAmbar: number;
   stats?: StatsAeropuerto;
 }> = React.memo(function AirportMarker({
   aeropuerto,
   cargaActual,
-  umbralVerde,
-  umbralAmbar,
   stats,
 }) {
   const pct = aeropuerto.capacidadMax > 0
     ? Math.round((cargaActual / aeropuerto.capacidadMax) * 100)
     : 0;
-  const colorAeropuerto = getAirportColor(
-    cargaActual,
-    aeropuerto.capacidadMax,
-    umbralVerde,
-    umbralAmbar
-  );
-  const icon = useMemo(() => crearIconoAeropuerto(colorAeropuerto), [colorAeropuerto]);
+  const collapsed = isAirportCollapsed(cargaActual, aeropuerto.capacidadMax);
+  const icon = useMemo(() => crearIconoAeropuerto(collapsed), [collapsed]);
 
   return (
     <Marker
@@ -155,11 +151,14 @@ const AirportMarker: React.FC<{
         <div style={{ fontSize: '11px', lineHeight: 1.5, minWidth: '160px' }}>
           <strong style={{ fontSize: '13px' }}>{aeropuerto.codigo}</strong>
           <span style={{ color: '#94a3b8', marginLeft: '4px' }}>{aeropuerto.ciudad}</span>
+          {collapsed && (
+            <span style={{ marginLeft: '6px', color: '#ef4444', fontWeight: 700, fontSize: '11px' }}>⚠ COLAPSO</span>
+          )}
           <br/>
           <span style={{ color: '#64748b' }}>{aeropuerto.pais} | GMT{aeropuerto.gmt >= 0 ? '+' : ''}{aeropuerto.gmt}</span>
           <hr style={{ borderColor: '#334155', margin: '4px 0' }} />
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-            <span>🗃️ <strong>{cargaActual}</strong>/{aeropuerto.capacidadMax} ({pct}%)</span>
+            <span>🗃️ <strong style={{ color: collapsed ? '#ef4444' : 'inherit' }}>{cargaActual}</strong>/{aeropuerto.capacidadMax} ({pct}%)</span>
           </div>
           {stats && (
             <div style={{ marginTop: '4px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -314,8 +313,6 @@ export default function MapaRutas({
             key={a.codigo}
             aeropuerto={a}
             cargaActual={cargasAeropuertos[a.codigo] || 0}
-            umbralVerde={umbralVerde}
-            umbralAmbar={umbralAmbar}
             stats={statsAeropuertos[a.codigo]}
           />
         ))}
@@ -323,9 +320,9 @@ export default function MapaRutas({
         {/* Aviones SA en vuelo */}
         {mostrarSA && activePlanesSA.map((t) => (
           <PlaneMarker
-            key={`plane-sa-${t.vueloId}`}
+            key={`plane-sa-${t.vueloId}-${t.diaOffset}`}
             tramo={t}
-            carga={cargaPorVueloSA[t.vueloId] || 0}
+            carga={cargaPorVueloSA[`${t.vueloId}-${t.diaOffset}`] || 0}
             simTiempoMinutos={simTiempoMinutos}
             umbralVerde={umbralVerde}
             umbralAmbar={umbralAmbar}
@@ -337,9 +334,9 @@ export default function MapaRutas({
         {/* Aviones ALNS en vuelo */}
         {mostrarALNS && activePlanesALNS.map((t) => (
           <PlaneMarker
-            key={`plane-alns-${t.vueloId}`}
+            key={`plane-alns-${t.vueloId}-${t.diaOffset}`}
             tramo={t}
-            carga={cargaPorVueloALNS[t.vueloId] || 0}
+            carga={cargaPorVueloALNS[`${t.vueloId}-${t.diaOffset}`] || 0}
             simTiempoMinutos={simTiempoMinutos}
             umbralVerde={umbralVerde}
             umbralAmbar={umbralAmbar}
@@ -354,6 +351,26 @@ export default function MapaRutas({
         .loadroute-plane-marker {
           transition: transform 16ms linear;
           will-change: transform;
+        }
+
+        /* Aeropuerto en colapso: pulso neón rojo */
+        @keyframes airportCollapsePulse {
+          0%, 100% {
+            filter: drop-shadow(0 0 0px rgba(239, 68, 68, 0));
+          }
+          50% {
+            filter: drop-shadow(0 0 10px rgba(239, 68, 68, 0.95))
+                    drop-shadow(0 0 20px rgba(239, 68, 68, 0.6));
+          }
+        }
+        .airport-collapse-pulse {
+          animation: airportCollapsePulse 0.9s ease-in-out infinite;
+        }
+
+        /* Aeropuerto normal: sombra azul suave */
+        .loadroute-airport-marker {
+          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.45));
+          z-index: 5000 !important;
         }
       `}</style>
     </div>
@@ -405,7 +422,13 @@ function construirIndiceCargasAeropuertos(rutas: RutaMuestra[]): IndicesCargaAer
   const intervalos: Record<string, { inicio: number; fin: number; maletas: number }[]> = {};
 
   for (const ruta of rutas) {
-    if (!ruta.tramos || ruta.tramos.length === 0) continue;
+    if (!ruta.tramos || ruta.tramos.length === 0) {
+      // Envío varado (no se le pudo asignar ruta).
+      // Entra al origen en su fecha de recepción, y nunca sale (ocupa espacio indefinidamente).
+      const recepcionTotal = ((ruta.recepcionDiaOffset || 0) * 1440) + (ruta.recepcionMinutosGMT || 0);
+      agregarIntervaloCarga(intervalos, ruta.origen, recepcionTotal, 9999999, ruta.maletas);
+      continue;
+    }
 
     const primerVuelo = ruta.tramos[0];
     const primeraSalida = salidaTotalMinutos(primerVuelo);
@@ -499,16 +522,17 @@ function calcularCargasAeropuertosEnMinuto(
   return cargas;
 }
 
-function calcularCargaPorVuelo(rutas: RutaMuestra[]): Record<number, number> {
-  const cargas: Record<number, number> = {};
+function calcularCargaPorVuelo(rutas: RutaMuestra[]): Record<string, number> {
+  const cargas: Record<string, number> = {};
 
   for (const ruta of rutas) {
     if (!ruta.tramos) continue;
-    const vuelosRuta = new Set<number>();
+    const vuelosRuta = new Set<string>();
     for (const tramo of ruta.tramos) {
-      if (vuelosRuta.has(tramo.vueloId)) continue;
-      vuelosRuta.add(tramo.vueloId);
-      cargas[tramo.vueloId] = (cargas[tramo.vueloId] || 0) + ruta.maletas;
+      const flightKey = `${tramo.vueloId}-${tramo.diaOffset}`;
+      if (vuelosRuta.has(flightKey)) continue;
+      vuelosRuta.add(flightKey);
+      cargas[flightKey] = (cargas[flightKey] || 0) + ruta.maletas;
     }
   }
 
@@ -549,13 +573,14 @@ function getInterpolatedPosition(t: TramoDTO, simTotalMinutos: number) {
 }
 
 function getActiveFlights(tramos: TramoDTO[], current: number) {
-  const seen = new Set<number>();
+  const seen = new Set<string>();
   const active: TramoDTO[] = [];
   
   for (const t of tramos) {
-    if (!t.vueloId || seen.has(t.vueloId)) continue;
+    const flightKey = `${t.vueloId}-${t.diaOffset}`;
+    if (!t.vueloId || seen.has(flightKey)) continue;
     if (isFlying(t, current)) {
-      seen.add(t.vueloId);
+      seen.add(flightKey);
       active.push(t);
     }
   }

@@ -343,7 +343,9 @@ public class RuteoAlgoritmoService {
             if (!colapsado) {
                 int n = Math.max(1, (int)(totalVuelos * 0.05));
                 for (int i = 0; i < n && !restantesSA.isEmpty(); i++) {
-                    canceladosSA.add(restantesSA.remove(0).getId());
+                    Vuelo vsa = restantesSA.remove(0);
+                    vsa.setCapacidadMax(0); // ERROR CORREGIDO: ahora el avión realmente no tiene espacio
+                    canceladosSA.add(vsa.getId());
                     canceladosTotal++;
                 }
             }
@@ -445,6 +447,27 @@ public class RuteoAlgoritmoService {
             muestras.add(rm);
             count++;
         }
+
+        // AGREGADO: Reportar los envíos varados para que el frontend los acumule en el aeropuerto origen
+        for (String idStr : sol.getEnviosSinRuta()) {
+            if (count >= MAX_RUTAS_MUESTRA) break;
+            Envio envio = envios.get(idStr);
+            if (envio == null) continue;
+
+            RutaMuestra rm = new RutaMuestra();
+            rm.setEnvioId(envio.getId());
+            rm.setOrigen(envio.getOrigen().getCodigo());
+            rm.setDestino(envio.getDestino().getCodigo());
+            rm.setMaletas(envio.getCantidadMaletas());
+            rm.setSlaHoras(envio.getSlaHoras());
+            LocalDateTime recepcionGMT = envio.getRecepcionGMT();
+            rm.setRecepcionMinutosGMT(recepcionGMT.getHour() * 60 + recepcionGMT.getMinute());
+            rm.setRecepcionDiaOffset(diaOffset);
+            rm.setTramos(new ArrayList<>()); // Tramos vacíos = se quedó en el aeropuerto origen
+            muestras.add(rm);
+            count++;
+        }
+
         r.setRutasMuestra(muestras);
         return r;
     }

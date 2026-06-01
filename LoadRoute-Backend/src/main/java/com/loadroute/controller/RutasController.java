@@ -141,4 +141,19 @@ public class RutasController {
         }
         return false;
     }
+
+    // ── Manejador de Excepciones ──────────────────────────────────────────────
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<java.util.Map<String, String>> handleIllegalArgumentException(IllegalArgumentException ex) {
+        // Imprime un mensaje claro y visible en la consola del backend
+        System.err.println("\n[ERROR DE VALIDACIÓN] No hay datos para simular: " + ex.getMessage() + "\n");
+        
+        // Retorna un JSON limpio a Postman con código 400 Bad Request en lugar de 500
+        java.util.Map<String, String> errorResponse = new java.util.HashMap<>();
+        errorResponse.put("error", "No hay datos para simular");
+        errorResponse.put("detalle", ex.getMessage());
+        
+        return ResponseEntity.badRequest().body(errorResponse);
+    }
 }
