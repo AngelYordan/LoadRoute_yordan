@@ -4,6 +4,7 @@ Este es el motor central de LoadRoute, encargado de procesar grandes volúmenes 
 
 ## 🚀 Tecnologías
 - **Java 17 & Spring Boot 3.x**
+- **MySQL 8+**: Persistencia relacional de aeropuertos, vuelos y envíos.
 - **Maven**: Gestión de dependencias y construcción.
 - **JUnit 5**: Pruebas unitarias para validación algorítmica.
 
@@ -29,6 +30,30 @@ El backend procesa tres archivos maestros que deben cargarse desde el frontend:
 ### Requisitos
 - JDK 17 o superior.
 - Maven instalado en el PATH.
+- MySQL 8 o superior.
+
+### Base de Datos MySQL
+El backend se conecta por defecto a:
+
+```text
+jdbc:mysql://localhost:3306/loadroute
+usuario: root
+password: vacio
+```
+
+Para crear la base de datos y sus tablas:
+
+```bash
+mysql -u root -p < src/main/resources/db/mysql/schema.sql
+```
+
+Tambien puedes cambiar la conexion con variables de entorno:
+
+```bash
+DB_URL=jdbc:mysql://localhost:3306/loadroute?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&rewriteBatchedStatements=true
+DB_USERNAME=root
+DB_PASSWORD=tu_password
+```
 
 ### Comandos de Construcción
 ```bash
@@ -43,8 +68,11 @@ mvn spring-boot:run
 ```
 
 ## 📍 Endpoints Principales
-- `POST /api/ruteo/ejecutar`: Orquesta el proceso completo de carga y optimización.
-- `GET /api/ruteo/health`: Verifica el estado del servicio.
+- `POST /api/rutas/simular`: Carga archivos, persiste datos en MySQL y ejecuta la simulacion sincrona.
+- `POST /api/rutas/simular-async`: Carga archivos, persiste datos en MySQL e inicia la simulacion asincrona.
+- `GET /api/rutas/simular-async/{jobId}`: Consulta el estado de una simulacion asincrona.
+- `GET /api/rutas/simular-async/{jobId}/chunks`: Descarga resultados parciales.
+- `GET /api/rutas/health`: Verifica el estado del servicio.
 
 ## 📊 Reglas de Negocio Aplicadas
 - **SLA**: 24h para vuelos continentales / 48h para intercontinentales.
