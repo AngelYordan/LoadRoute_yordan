@@ -8,6 +8,7 @@ Sistema avanzado de planificación y ruteo basado en metaheurísticas para la op
 ![Preview Dashboard](https://img.shields.io/badge/Status-Functional-emerald)
 ![Tech Backend](https://img.shields.io/badge/Backend-Java_17_%7C_Spring_Boot_3-red)
 ![Tech Frontend](https://img.shields.io/badge/Frontend-Next.js_14_%7C_Tailwind-blue)
+![Database](https://img.shields.io/badge/Database-MySQL-orange)
 
 ## 🎯 Propósito
 LoadRoute es una plataforma diseñada para resolver el problema de ruteo de envíos internacionales bajo restricciones estrictas de tiempo (SLA) y capacidad. El sistema permite cargar planes de vuelo, aeropuertos y envíos para generar rutas óptimas que minimizan el tiempo de tránsito y penalizan el incumplimiento de capacidad tanto en aviones como en almacenes.
@@ -16,6 +17,7 @@ LoadRoute es una plataforma diseñada para resolver el problema de ruteo de env�
 
 ### Core & Algoritmos (Backend)
 - **Java 17 & Spring Boot 3.2**: Base robusta para el motor de optimización.
+- **MySQL 8+**: Persistencia de aeropuertos, vuelos y envíos cargados desde el frontend.
 - **ALNS (Adaptive Large Neighborhood Search)**: Algoritmo de vecindad variable para explorar soluciones complejas.
 - **Simulated Annealing (SA)**: Metaheurística de enfriamiento para escapar de óptimos locales.
 - **Temporal Occupancy Engine**: Seguimiento exacto minuto a minuto de la carga en cada aeropuerto.
@@ -41,11 +43,15 @@ El motor de ruteo actual implementa reglas de negocio avanzadas:
 - **JDK 17** o superior.
 - **Node.js 18** o superior.
 - **Maven 3.8+**.
+- **MySQL 8** o superior.
 
 ### Paso 1: Configurar el Backend
 ```bash
 # Navegar al directorio
 cd LoadRoute-Backend
+
+# Crear la base de datos y tablas en MySQL
+mysql -u root -p < src/main/resources/db/mysql/schema.sql
 
 # Compilar el proyecto
 mvn clean install
@@ -54,6 +60,9 @@ mvn clean install
 mvn spring-boot:run
 ```
 El servidor estará disponible en `http://localhost:8080`.
+
+Por defecto el backend usa `jdbc:mysql://localhost:3306/loadroute` con usuario `root`.
+Puedes sobreescribirlo con `DB_URL`, `DB_USERNAME` y `DB_PASSWORD`.
 
 ### Paso 2: Configurar el Frontend
 ```bash
