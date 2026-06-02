@@ -6,9 +6,10 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 /**
  * Aplicación principal de LoadRoute - PoC de Sistema de Planificación Logística
  * 
- * Expone APIs REST para algoritmos de ruteo:
- * - GET /api/rutas/sa (Simulated Annealing)
- * - GET /api/rutas/alns (ALNS - Adaptive Large-Neighborhood Search)
+ * Expone APIs REST para carga de datos en MySQL y simulacion de ruteo:
+ * - POST /api/rutas/simular
+ * - POST /api/rutas/simular-async
+ * - GET /api/rutas/health
  */
 @SpringBootApplication
 public class LoadRouteApplication {

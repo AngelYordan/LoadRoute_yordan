@@ -237,8 +237,8 @@
 ```json
 {
   "frontend_request": {
-    "method": "GET",
-    "url": "http://localhost:8080/api/rutas/sa",
+    "method": "POST",
+    "url": "http://localhost:8080/api/rutas/simular-async",
     "headers": {
       "Content-Type": "application/json",
       "origin": "http://localhost:3000"
@@ -247,12 +247,12 @@
   
   "backend_processing": {
     "step_1": "CORS validation",
-    "step_2": "Route to RutasController.ruteoSimulatedAnnealing()",
-    "step_3": "Inject SimulatedAnnealingService",
-    "step_4": "Call service.ejecutarRuteo(null, null)",
-    "step_5": "Query database for Aeropuertos, Vuelos",
-    "step_6": "Generate route (mock)",
-    "step_7": "Convert Entities to DTOs",
+    "step_2": "Route to RutasController.simularAsync()",
+    "step_3": "Persist uploaded files in MySQL",
+    "step_4": "Start async job",
+    "step_5": "Query MySQL for Aeropuertos, Vuelos, Envios",
+    "step_6": "Run Simulated Annealing",
+    "step_7": "Convert algorithm models to DTOs",
     "step_8": "Wrap in RutaResponseDTO",
     "step_9": "Serialize to JSON"
   },
@@ -314,10 +314,10 @@
 
 ### Request Headers (desde Frontend)
 ```http
-GET /api/rutas/sa HTTP/1.1
+POST /api/rutas/simular-async HTTP/1.1
 Host: localhost:8080
 Origin: http://localhost:3000
-Content-Type: application/json
+Content-Type: multipart/form-data
 Connection: keep-alive
 ```
 
@@ -335,7 +335,7 @@ Date: Tue, 15 Apr 2026 15:30:45 GMT
 
 ---
 
-## 💾 Flujo de Persistencia (Backend ↔ BD)
+## 💾 Flujo de Persistencia (Backend ↔ MySQL)
 
 ```
 SimulatedAnnealingService.generarRutaMock()
