@@ -31,7 +31,7 @@ const MapaRutas = dynamic(() => import('@/components/MapaRutas'), {
 });
 
 // ── Tipos de tabs ──
-type TabId = 'pedidos' | 'aeropuertos' | 'simulacion' | 'pantalla' | 'vuelos' | 'administracion';
+type TabId = 'pedidos' | 'aeropuertos' | 'simulacion' | 'pantalla' | 'vuelos' | 'resultados' | 'administracion';
 const MAP_FRAME_INTERVAL_MS = 1000 / 30;
 
 const FILTROS_AVIONES_INICIALES: FiltrosAvionesMapa = {
@@ -47,8 +47,16 @@ const NAV_TABS: { id: TabId; icon: ReactNode; label: string; color: string }[] =
   { id: 'simulacion',     icon: <IconSettings size={20} />,   label: 'Simulación',  color: 'violet'  },
   { id: 'pantalla',       icon: <IconScreen size={20} />,     label: 'Pantalla',    color: 'cyan'    },
   { id: 'vuelos',         icon: <IconPlane size={20} />,      label: 'Vuelos',      color: 'orange'  },
+  { id: 'resultados',     icon: <IconChart size={20} />,      label: 'Resultados',  color: 'indigo'  },
   { id: 'administracion', icon: <IconClipboard size={20} />,  label: 'Maestros',    color: 'rose'    },
 ];
+
+function getPanelWidth(tab: TabId | null): string {
+  if (!tab) return '0px';
+  if (tab === 'administracion') return '600px';
+  if (tab === 'resultados') return '520px';
+  return '320px';
+}
 
 // ── Helper: tiempo transcurrido legible ──
 function formatTiempoTranscurrido(minutos: number): string {
@@ -307,7 +315,6 @@ export default function Home() {
 
   // Layout
   const [activeTab,        setActiveTab]        = useState<TabId | null>(null);
-  const [panelResultOpen,  setPanelResultOpen]  = useState(false);
   const filtrosAvionesInicializadosRef = useRef(false);
 
   // Umbrales dinámicos de capacidad
@@ -444,7 +451,16 @@ export default function Home() {
   };
 
   const handleTabClick = useCallback((id: TabId) => {
-    setActiveTab(prev => prev === id ? null : id);
+    setActiveTab(prev => {
+      const next = prev === id ? null : id;
+      if (next) setVueloModal(null);
+      return next;
+    });
+  }, []);
+
+  const handleSelectVuelo = useCallback((vuelo: TramoDTO) => {
+    setActiveTab(null);
+    setVueloModal(vuelo);
   }, []);
 
   // ── Clamp umbral verde para que no supere ámbar
@@ -648,6 +664,7 @@ export default function Home() {
                 violet:  'bg-violet-500/20 text-violet-400 shadow-violet-500/20',
                 cyan:    'bg-cyan-500/20 text-cyan-300 shadow-cyan-500/20',
                 orange:  'bg-orange-500/20 text-orange-400 shadow-orange-500/20',
+                indigo:  'bg-indigo-500/20 text-indigo-300 shadow-indigo-500/20',
                 rose:    'bg-rose-500/20 text-rose-400 shadow-rose-500/20',
               };
             return (
@@ -682,7 +699,7 @@ export default function Home() {
             resultado={resultado}
             simTiempoMinutos={simTotalVisual}
             cargasAeropuertoOverride={cargasAeropuertoFinales}
-            onSelectVuelo={setVueloModal}
+            onSelectVuelo={handleSelectVuelo}
             selectedVuelo={vueloModal}
             umbralVerde={umbralVerde}
             umbralAmbar={umbralAmbar}
@@ -727,10 +744,10 @@ export default function Home() {
           {/* ── PANEL LATERAL IZQUIERDO — flotante, no afecta el ancho del mapa ── */}
           <div
             className="absolute top-0 left-0 h-full z-[1000] overflow-hidden pointer-events-none"
-            style={{ width: activeTab ? (activeTab === 'administracion' ? '600px' : '320px') : '0px', transition: 'width 0.25s ease' }}
+            style={{ width: getPanelWidth(activeTab), transition: 'width 0.25s ease' }}
           >
             <div className="pointer-events-auto h-full bg-[#0c1a30]/95 border-r border-slate-700/50 backdrop-blur-sm flex flex-col"
-                 style={{ width: activeTab === 'administracion' ? '600px' : '320px' }}>
+                 style={{ width: getPanelWidth(activeTab) }}>
               {/* Header del panel con botón cerrar */}
               <div className="px-4 py-3 bg-[#0f1f3d]/80 border-b border-slate-700/50 shrink-0 flex items-center justify-between backdrop-blur-sm">
                 <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
@@ -797,49 +814,21 @@ export default function Home() {
                 {activeTab === 'administracion' && (
                   <AdminPanel />
                 )}
+                {activeTab === 'resultados' && (
+                  <div className="h-full overflow-y-auto custom-scrollbar p-4">
+                    <ResultadosPanel
+                      resultadoSA={resultado.resultadoSA || null}
+                      resultadoALNS={resultado.resultadoALNS || null}
+                      escenario={resultado.escenario}
+                      totalVuelos={resultado.totalVuelos}
+                      totalEnvios={resultado.totalEnviosCargados}
+                      resultadoCompleto={resultado}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           </div>
-
-          {/* ── PANEL RESULTADOS — flotante derecha, no afecta ancho del mapa ── */}
-          <div
-            className="absolute top-0 right-0 h-full z-[1000] overflow-hidden pointer-events-none"
-            style={{ width: panelResultOpen ? 'min(760px, 48vw)' : '0px', transition: 'width 0.25s ease' }}
-          >
-            <div
-              className="pointer-events-auto h-full bg-[#0c1a30]/95 border-l border-slate-700/50 backdrop-blur-sm overflow-y-auto custom-scrollbar"
-              style={{ width: 'min(760px, 48vw)' }}
-            >
-              <div className="p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                    <IconChart size={14} className="text-blue-400" /> Panel de Resultados
-                  </p>
-                </div>
-                <ResultadosPanel
-                  resultadoSA={resultado.resultadoSA || null}
-                  resultadoALNS={resultado.resultadoALNS || null}
-                  escenario={resultado.escenario}
-                  totalVuelos={resultado.totalVuelos}
-                  totalEnvios={resultado.totalEnviosCargados}
-                  resultadoCompleto={resultado}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Botón toggle panel de resultados */}
-          <button
-            onClick={() => setPanelResultOpen(p => !p)}
-            className="absolute right-0 top-1/2 -translate-y-1/2 z-[1001]
-                       w-6 h-16 bg-[#0c1a30] border border-slate-700/50 border-r-0
-                       rounded-l-lg flex items-center justify-center
-                       text-slate-400 hover:text-slate-200 hover:bg-slate-700/50
-                       transition-all text-xs"
-            aria-label="Toggle panel de resultados"
-          >
-            {panelResultOpen ? '›' : '‹'}
-          </button>
         </main>
       </div>
 
