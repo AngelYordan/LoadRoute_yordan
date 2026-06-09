@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { AeropuertoDTO, FiltrosAvionesMapa } from '@/types/rutas';
+import { IconSearch } from '@/components/icons';
 
 interface SidebarFiltroMapaProps {
   aeropuertos: AeropuertoDTO[];
@@ -143,7 +144,7 @@ export default function SidebarFiltroMapa({
           </div>
 
           <div className="relative mt-2">
-            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 text-xs">🔍</span>
+            <IconSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
             <input
               type="text"
               value={searchTerm}
@@ -219,7 +220,7 @@ export default function SidebarFiltroMapa({
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="px-3 pt-3 pb-2 bg-[#0f1f3d] border-b border-slate-700/50 shrink-0">
+      <div className="px-3 pt-3 pb-2 bg-[#0f1f3d]/80 border-b border-slate-700/50 shrink-0 backdrop-blur-sm">
         <p className="text-xs font-semibold text-cyan-300 uppercase tracking-wider">
           Aviones en pantalla
         </p>

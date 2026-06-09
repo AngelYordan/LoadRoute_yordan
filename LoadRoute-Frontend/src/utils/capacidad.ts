@@ -126,7 +126,14 @@ export function calcularUltimasCargasAeropuertos(
 
 export function porcentajeOcupacion(cargaActual: number, capacidadMax: number): number {
   if (capacidadMax <= 0) return 0;
-  return Math.min((cargaActual / capacidadMax) * 100, 100);
+  const pct = Math.min((cargaActual / capacidadMax) * 100, 100);
+  return Math.round(pct * 10) / 10;
+}
+
+/** Formatea un porcentaje para mostrar en UI (1 decimal máx., sin ceros innecesarios). */
+export function formatPorcentaje(pct: number): string {
+  const rounded = Math.round(pct * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
 export function colorOcupacion(cargaActual: number, capacidadMax: number): string {

@@ -10,4 +10,5 @@ import java.util.List;
 @Repository
 public interface EnvioRepository extends JpaRepository<EnvioEntity, Long> {
     List<EnvioEntity> findByFechaCreacionBetween(LocalDateTime inicio, LocalDateTime fin);
+    boolean existsByOrigen_IdOrDestino_Id(Long origenId, Long destinoId);
 }

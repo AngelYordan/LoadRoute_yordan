@@ -1,8 +1,12 @@
 'use client';
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
 import { ejecutarSimulacion } from '@/services/ruteoService';
 import { RutaResponse, SimulacionJob } from '@/types/rutas';
+import {
+  IconChart, IconBolt, IconRefresh, IconBuilding, IconPlane, IconPackage,
+  IconClock, IconWarning, IconPlay, IconCheck,
+} from '@/components/icons';
 
 interface ControlPanelProps {
   onResultado: (resultado: RutaResponse[]) => void;
@@ -24,7 +28,7 @@ const ESCENARIOS = [
     titulo: 'Simulación de Periodo',
     subtitulo: 'Sin interrupciones — SA',
     descripcion: 'Simulación completa del periodo sin cancelaciones. SA optimiza en condiciones ideales para establecer el baseline de rendimiento.',
-    icono: '📊',
+    icono: <IconChart size={18} />,
     color: 'cyan',
   },
   {
@@ -32,7 +36,7 @@ const ESCENARIOS = [
     titulo: 'Operación Día a Día',
     subtitulo: 'Baja interrupción — SA',
     descripcion: 'Operación real con cancelación leve (~1% de vuelos/día). SA replanifica diariamente. El estado de la red evoluciona progresivamente.',
-    icono: '⚡',
+    icono: <IconBolt size={18} />,
     color: 'blue',
   },
   {
@@ -40,23 +44,47 @@ const ESCENARIOS = [
     titulo: 'Operación de Colapso',
     subtitulo: 'Cancelación agresiva — SA',
     descripcion: 'Cancelación acumulativa del 5% de vuelos por día. SA replanifica bajo estrés progresivo hasta alcanzar el punto de colapso.',
-    icono: '🔄',
+    icono: <IconRefresh size={18} />,
     color: 'amber',
   },
 ];
 
 const FILE_CONFIGS = [
-  { key: 'aeropuertos', label: 'Aeropuertos', desc: 'Husos horarios (.txt)', icon: '🏢', accept: '.txt' },
-  { key: 'vuelos',      label: 'Planes de Vuelo', desc: 'planes_vuelo.txt',  icon: '✈️', accept: '.txt' },
-  { key: 'envios',      label: 'Envíos', desc: '_envios_XXXX_.txt',          icon: '📦', accept: '.txt' },
+  { key: 'aeropuertos', label: 'Aeropuertos', desc: 'Husos horarios (.txt)', icon: <IconBuilding size={18} />, accept: '.txt' },
+  { key: 'vuelos',      label: 'Planes de Vuelo', desc: 'planes_vuelo.txt',  icon: <IconPlane size={18} />, accept: '.txt' },
+  { key: 'envios',      label: 'Envíos', desc: '_envios_XXXX_.txt',          icon: <IconPackage size={18} />, accept: '.txt' },
 ];
 
-const DURACION_PERIODO_MIN  = 10;
+const DURACION_PERIODO_MIN  = 5;
 const DURACION_PERIODO_MAX  = 90;
 const DURACION_PERIODO_STEP = 5;
 
+function duracionAnimacionPorDefecto(escenarioId: number): number {
+  return escenarioId === 1 ? 60 : 15;
+}
+
 function toBackendDate(htmlDate: string): string {
   return htmlDate.replace(/-/g, '');
+}
+
+function todayAsHtmlDate(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function calcularDuracion(fechaInicio: string, horaInicio: string, fechaFin: string, horaFin: string) {
+  if (!fechaInicio || !fechaFin) return null;
+  const start = new Date(`${fechaInicio}T${horaInicio || '00:00'}`);
+  const end   = new Date(`${fechaFin}T${horaFin || '23:59'}`);
+  if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) return null;
+  const diffMs = end.getTime() - start.getTime();
+  const dias   = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const horas  = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const mins   = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+  return { dias, horas, mins };
 }
 
 const colorMap: Record<string, string> = {
@@ -77,12 +105,21 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
     envios:      { files: [], name: '' },
   });
   const [escenario,              setEscenario]              = useState(1);
-  const [duracionPeriodoMinutos, setDuracionPeriodoMinutos] = useState(60);
+  const [duracionPeriodoMinutos, setDuracionPeriodoMinutos] = useState(60); // se ajusta al cambiar escenario
   const [fechaInicio,            setFechaInicio]            = useState('');
   const [fechaFin,               setFechaFin]               = useState('');
+  const [horaInicio,             setHoraInicio]             = useState('00:00');
+  const [horaFin,                setHoraFin]                = useState('23:59');
   const [ejecutando,             setEjecutando]             = useState(false);
   const [progreso,               setProgreso]               = useState<SimulacionJob | null>(null);
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  const duracion = useMemo(
+    () => calcularDuracion(fechaInicio, horaInicio, fechaFin, horaFin),
+    [fechaInicio, horaInicio, fechaFin, horaFin]
+  );
+
+  const fechaFinMinima = fechaInicio || undefined;
 
   const handleFileChange = useCallback((key: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const fileList = e.target.files;
@@ -100,14 +137,21 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
 
   const handleFechaInicioChange = (val: string) => {
     setFechaInicio(val);
+    // Si fecha fin < fecha inicio, la corregimos
+    if (fechaFin && val && fechaFin < val) setFechaFin(val);
     if (onFechaInicio) onFechaInicio(val ? toBackendDate(val) : '');
+  };
+
+  const handleHoy = () => {
+    const hoy = todayAsHtmlDate();
+    handleFechaInicioChange(hoy);
   };
 
   const handleEjecutar = async () => {
     setEjecutando(true);
     onCargando(true);
     onError('');
-    if (escenario === 1) onDuracionSimulacion?.(duracionPeriodoMinutos);
+    onDuracionSimulacion?.(duracionPeriodoMinutos);
     setProgreso({ jobId: '', status: 'PENDING', progress: 0, message: 'Preparando simulacion...' });
     try {
       const resultado = await ejecutarSimulacion(
@@ -148,12 +192,15 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
             return (
               <button
                 key={esc.id}
-                onClick={() => setEscenario(esc.id)}
+                onClick={() => {
+                  setEscenario(esc.id);
+                  setDuracionPeriodoMinutos(duracionAnimacionPorDefecto(esc.id));
+                }}
                 className={`text-left rounded-lg border p-3 transition-all duration-200 hover:scale-[1.02]
                   ${isActive ? colorMapActive[esc.color] : colorMap[esc.color]}`}
               >
                 <div className="flex items-start gap-1.5">
-                  <span className="text-lg mt-0.5 shrink-0">{esc.icono}</span>
+                  <span className="mt-0.5 shrink-0 opacity-90">{esc.icono}</span>
                   <div className="min-w-0">
                     <p className="text-xs font-semibold text-slate-100 leading-tight">{esc.titulo}</p>
                     <p className="text-[10px] text-slate-400 mt-0.5 leading-tight">{esc.subtitulo}</p>
@@ -202,7 +249,7 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
                     className="hidden"
                   />
                   <div className="flex items-center gap-2">
-                    <span className="text-lg shrink-0">{hasFile ? '✅' : cfg.icon}</span>
+                    <span className="shrink-0">{hasFile ? <IconCheck size={18} className="text-emerald-400" /> : cfg.icon}</span>
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-medium text-slate-200 leading-tight">{cfg.label}</p>
                       <p className="text-[10px] text-slate-400 truncate leading-tight mt-0.5">
@@ -216,67 +263,112 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
           </div>
         </div>
 
-        {/* Columna derecha: Fechas + Duración */}
-        <div className="flex flex-col gap-3">
+        {/* Columna derecha: Fechas + Hora + Duración */}
+        <div className="flex flex-col gap-2">
           <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
             <span>📅</span> Periodo
             <span className="text-slate-600 font-normal normal-case tracking-normal">(opcional)</span>
           </h3>
-          <div className="space-y-2">
-            <div className="flex flex-col gap-1">
+
+          {/* Fecha + Hora Inicio */}
+          <div className="rounded-lg border border-slate-700/40 bg-slate-800/20 p-2 space-y-1.5">
+            <div className="flex items-center justify-between">
               <label className="text-[10px] text-slate-500 uppercase tracking-wider">Inicio</label>
-              <input
-                type="date"
-                value={fechaInicio}
-                onChange={e => handleFechaInicioChange(e.target.value)}
-                className="bg-slate-800/50 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-200
-                           focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/20
-                           [color-scheme:dark] transition-all"
-              />
+              <button
+                type="button"
+                onClick={handleHoy}
+                className="text-[10px] text-blue-400/80 hover:text-blue-300 transition-colors px-1.5 py-0.5 rounded border border-blue-500/20 hover:border-blue-400/40"
+              >
+                Hoy
+              </button>
             </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] text-slate-500 uppercase tracking-wider">Fin</label>
-              <input
-                type="date"
-                value={fechaFin}
-                min={fechaInicio}
-                onChange={e => setFechaFin(e.target.value)}
-                className="bg-slate-800/50 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-200
-                           focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/20
-                           [color-scheme:dark] transition-all"
-              />
+            <input
+              type="date"
+              value={fechaInicio}
+              onChange={e => handleFechaInicioChange(e.target.value)}
+              className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-200
+                         focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/20
+                         [color-scheme:dark] transition-all"
+            />
+            <input
+              type="time"
+              value={horaInicio}
+              onChange={e => setHoraInicio(e.target.value)}
+              className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-200
+                         focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/20
+                         [color-scheme:dark] transition-all"
+            />
+          </div>
+
+          {/* Fecha + Hora Fin */}
+          <div className="rounded-lg border border-slate-700/40 bg-slate-800/20 p-2 space-y-1.5">
+            <label className="text-[10px] text-slate-500 uppercase tracking-wider block">Fin</label>
+            <input
+              type="date"
+              value={fechaFin}
+              min={fechaFinMinima}
+              onChange={e => setFechaFin(e.target.value)}
+              className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-200
+                         focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/20
+                         [color-scheme:dark] transition-all"
+            />
+            <input
+              type="time"
+              value={horaFin}
+              onChange={e => setHoraFin(e.target.value)}
+              className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-200
+                         focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/20
+                         [color-scheme:dark] transition-all"
+            />
+          </div>
+
+          {/* Duración calculada */}
+          {duracion ? (
+            <p className="text-[10px] text-emerald-400/80 flex items-center gap-1.5 px-1">
+              <IconClock size={14} className="shrink-0" />
+              <span>Duración: <strong>{duracion.dias}d {duracion.horas}h {duracion.mins}m</strong></span>
+            </p>
+          ) : !fechaInicio ? (
+            <p className="text-[10px] text-amber-400/80 flex items-center gap-1 px-1">
+              <IconWarning size={14} className="shrink-0" /> Sin fechas: todos los envíos
+            </p>
+          ) : null}
+
+          {/* Duración animación (todos los escenarios) */}
+          <div className={`rounded-lg border p-3 mt-1 ${
+            escenario === 1
+              ? 'border-cyan-500/20 bg-cyan-500/5'
+              : 'border-violet-500/20 bg-violet-500/5'
+          }`}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Duración Anim.</span>
+              <span className={`text-xs font-bold px-2 py-0.5 rounded border ${
+                escenario === 1
+                  ? 'text-cyan-100 bg-cyan-500/15 border-cyan-400/30'
+                  : 'text-violet-100 bg-violet-500/15 border-violet-400/30'
+              }`}>
+                {duracionPeriodoMinutos} min
+              </span>
             </div>
-            {!fechaInicio && (
-              <p className="text-[10px] text-amber-400/80 flex items-center gap-1">
-                <span>⚠️</span> Sin fechas: todos los envíos
+            <input
+              type="range"
+              min={DURACION_PERIODO_MIN}
+              max={DURACION_PERIODO_MAX}
+              step={DURACION_PERIODO_STEP}
+              value={duracionPeriodoMinutos}
+              onChange={e => setDuracionPeriodoMinutos(Number(e.target.value))}
+              className={`w-full cursor-pointer ${escenario === 1 ? 'accent-cyan-400' : 'accent-violet-400'}`}
+            />
+            <div className="flex justify-between text-[9px] font-medium text-slate-500 mt-1">
+              <span>{DURACION_PERIODO_MIN}m (rápido)</span>
+              <span>{DURACION_PERIODO_MAX}m</span>
+            </div>
+            {escenario !== 1 && (
+              <p className="text-[9px] text-slate-500 mt-1.5">
+                Día a día / colapso: por defecto 15 min. Baja el valor para acelerar.
               </p>
             )}
           </div>
-
-          {/* Duración (solo escenario 1) */}
-          {escenario === 1 && (
-            <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3 mt-1">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Duración Anim.</span>
-                <span className="text-xs font-bold text-cyan-100 bg-cyan-500/15 border border-cyan-400/30 px-2 py-0.5 rounded">
-                  {duracionPeriodoMinutos} min
-                </span>
-              </div>
-              <input
-                type="range"
-                min={DURACION_PERIODO_MIN}
-                max={DURACION_PERIODO_MAX}
-                step={DURACION_PERIODO_STEP}
-                value={duracionPeriodoMinutos}
-                onChange={e => setDuracionPeriodoMinutos(Number(e.target.value))}
-                className="w-full cursor-pointer accent-cyan-400"
-              />
-              <div className="flex justify-between text-[9px] font-medium text-slate-500 mt-1">
-                <span>{DURACION_PERIODO_MIN}m</span>
-                <span>{DURACION_PERIODO_MAX}m</span>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
@@ -297,7 +389,7 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
           </>
         ) : (
           <>
-            <span>▶</span>
+            <IconPlay size={14} />
             Ejecutar — Escenario {escenario}
           </>
         )}

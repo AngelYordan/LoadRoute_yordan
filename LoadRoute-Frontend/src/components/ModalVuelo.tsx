@@ -1,4 +1,6 @@
 import { RutaMuestra, TramoDTO } from '@/types/rutas';
+import { porcentajeOcupacion, formatPorcentaje } from '@/utils/capacidad';
+import { IconPlane, IconClose } from '@/components/icons';
 
 interface ModalVueloProps {
   vuelo: TramoDTO | null;
@@ -24,7 +26,7 @@ export default function ModalVuelo({ vuelo, rutasActivas, onClose }: ModalVueloP
   // Calcular ocupación actual 
   const cargaActual = enviosEnVuelo.reduce((sum, r) => sum + r.maletas, 0);
 
-  const porcentaje = Math.min((cargaActual / Math.max(vuelo.capacidad, 1)) * 100, 100).toFixed(1);
+  const porcentaje = formatPorcentaje(porcentajeOcupacion(cargaActual, vuelo.capacidad));
 
   return (
     <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -34,7 +36,7 @@ export default function ModalVuelo({ vuelo, rutasActivas, onClose }: ModalVueloP
         <div className="px-5 py-4 border-b border-slate-700/50 flex items-center justify-between bg-black/20 rounded-t-xl shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center">
-              <span className="text-xl">✈️</span>
+              <IconPlane size={20} className="text-blue-400" />
             </div>
             <div>
               <h3 className="text-lg font-bold text-white leading-tight">Vuelo #{vuelo.vueloId}</h3>
@@ -47,7 +49,7 @@ export default function ModalVuelo({ vuelo, rutasActivas, onClose }: ModalVueloP
             onClick={onClose}
             className="w-8 h-8 rounded-full hover:bg-slate-700/50 flex items-center justify-center text-slate-400 hover:text-white transition-colors"
           >
-            ✕
+            <IconClose size={18} />
           </button>
         </div>
 

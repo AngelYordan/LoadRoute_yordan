@@ -12,6 +12,7 @@ import {
 } from 'react-leaflet';
 import L from 'leaflet';
 import { RutaResponse, AeropuertoDTO, FiltrosAvionesMapa, RutaMuestra, TramoDTO } from '@/types/rutas';
+import { IconMap } from '@/components/icons';
 import 'leaflet/dist/leaflet.css';
 
 type ModoMapa = 'sa' | 'alns' | 'ambos';
@@ -152,13 +153,13 @@ const AirportMarker: React.FC<{
           <strong style={{ fontSize: '13px' }}>{aeropuerto.codigo}</strong>
           <span style={{ color: '#94a3b8', marginLeft: '4px' }}>{aeropuerto.ciudad}</span>
           {collapsed && (
-            <span style={{ marginLeft: '6px', color: '#ef4444', fontWeight: 700, fontSize: '11px' }}>⚠ COLAPSO</span>
+            <span style={{ marginLeft: '6px', color: '#ef4444', fontWeight: 700, fontSize: '11px' }}>COLAPSO</span>
           )}
           <br/>
           <span style={{ color: '#64748b' }}>{aeropuerto.pais} | GMT{aeropuerto.gmt >= 0 ? '+' : ''}{aeropuerto.gmt}</span>
           <hr style={{ borderColor: '#334155', margin: '4px 0' }} />
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-            <span>🗃️ <strong style={{ color: collapsed ? '#ef4444' : 'inherit' }}>{cargaActual}</strong>/{aeropuerto.capacidadMax} ({pct}%)</span>
+            <span>Carga: <strong style={{ color: collapsed ? '#ef4444' : 'inherit' }}>{cargaActual}</strong>/{aeropuerto.capacidadMax} ({pct}%)</span>
           </div>
           {stats && (
             <div style={{ marginTop: '4px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -265,10 +266,18 @@ export default function MapaRutas({
     [mostrarALNS, tramosVisiblesALNS, simTiempoMinutos]
   );
 
+  const simDia = Math.floor(simTiempoMinutos / 1440);
+  const vuelosCanceladosHoy = useMemo(() => {
+    if (!resultado?.cancelacionesPorDiaSA || !resultado.vuelosMaestros) return [];
+    const ids = resultado.cancelacionesPorDiaSA[simDia] || [];
+    const vuelos = ids.map(id => resultado.vuelosMaestros?.find(v => v.id === id)).filter(Boolean);
+    return vuelos;
+  }, [resultado?.cancelacionesPorDiaSA, resultado?.vuelosMaestros, simDia]);
+
   if (aeropuertos.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full rounded-lg bg-transparent">
-        <span className="text-4xl mb-3 opacity-60">🗺️</span>
+        <IconMap className="mb-3 text-cyan-400/40" size={40} />
       </div>
     );
   }
@@ -306,6 +315,28 @@ export default function MapaRutas({
             dashArray="8, 5"
           />
         )}
+
+        {/* Polilíneas de vuelos cancelados del día actual */}
+        {vuelosCanceladosHoy.map(vuelo => {
+          const origen = aeropuertos.find(a => a.codigo === vuelo.origenCodigo);
+          const destino = aeropuertos.find(a => a.codigo === vuelo.destinoCodigo);
+          if (!origen || !destino) return null;
+          return (
+            <Polyline
+              key={`canceled-${vuelo.id}`}
+              positions={[[origen.latitud, origen.longitud], [destino.latitud, destino.longitud]]}
+              color="#ef4444"
+              weight={2}
+              opacity={0.7}
+              dashArray="8, 5"
+            >
+              <Tooltip direction="top" className="canceled-tooltip">
+                <span className="font-bold text-red-500">🚫 Vuelo Cancelado</span><br />
+                {vuelo.origenCodigo} → {vuelo.destinoCodigo}
+              </Tooltip>
+            </Polyline>
+          );
+        })}
 
         {/* Marcadores de aeropuertos */}
         {aeropuertos.map(a => (

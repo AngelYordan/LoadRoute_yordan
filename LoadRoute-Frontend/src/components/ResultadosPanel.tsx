@@ -1,7 +1,9 @@
 'use client';
 
 import React from 'react';
-import { ResultadoAlgoritmo } from '@/types/rutas';
+import { ResultadoAlgoritmo, RutaResponse } from '@/types/rutas';
+import { exportarAExcel, exportarAPDF } from '@/utils/exportUtils';
+import { IconWarning, IconFilePdf, IconFileExcel } from '@/components/icons';
 
 interface ResultadosPanelProps {
   resultadoSA: ResultadoAlgoritmo | null;
@@ -9,6 +11,7 @@ interface ResultadosPanelProps {
   escenario: number;
   totalVuelos: number;
   totalEnvios: number;
+  resultadoCompleto: RutaResponse | null;
 }
 
 function AlgoritmoBloque({ res }: { res: ResultadoAlgoritmo }) {
@@ -19,7 +22,9 @@ function AlgoritmoBloque({ res }: { res: ResultadoAlgoritmo }) {
     <div className="rounded-lg border border-blue-500/20 overflow-hidden">
       {res.mensajeColapso && (
         <div className="bg-red-900/50 border-b border-red-500/50 p-3 text-red-300 text-xs font-bold text-center animate-pulse shadow-inner">
-          ⚠️ {res.mensajeColapso}
+          <span className="flex items-center justify-center gap-1.5">
+            <IconWarning size={14} className="shrink-0" /> {res.mensajeColapso}
+          </span>
         </div>
       )}
 
@@ -95,9 +100,10 @@ function ResultadosPanel({
   escenario,
   totalVuelos,
   totalEnvios,
+  resultadoCompleto,
 }: ResultadosPanelProps) {
   const resultado = resultadoSA || resultadoALNS;
-  if (!resultado) return null;
+  if (!resultado || !resultadoCompleto) return null;
 
   return (
     <div className="space-y-4 fade-in-up">
@@ -108,6 +114,22 @@ function ResultadosPanel({
         <span className="text-slate-600">|</span>
         <span>Escenario: <strong className="text-slate-200">{escenario}</strong></span>
       </div>
+
+      <div className="flex gap-2">
+        <button
+          onClick={() => exportarAPDF(resultadoCompleto)}
+          className="flex-1 bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 py-2 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
+        >
+          <IconFilePdf size={14} /> Exportar PDF
+        </button>
+        <button
+          onClick={() => exportarAExcel(resultadoCompleto)}
+          className="flex-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 py-2 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
+        >
+          <IconFileExcel size={14} /> Exportar Excel
+        </button>
+      </div>
+
       <AlgoritmoBloque res={resultado} />
     </div>
   );

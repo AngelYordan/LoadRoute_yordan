@@ -10,54 +10,56 @@ import ModalAeropuerto from '@/components/ModalAeropuerto';
 import ModalVuelo from '@/components/ModalVuelo';
 import ResultadosPanel from '@/components/ResultadosPanel';
 import SidebarVuelos from '@/components/SidebarVuelos';
+import AdminPanel from '@/components/AdminPanel';
 import { RutaResponse, RutaMuestra, AeropuertoDTO, TramoDTO, FiltrosAvionesMapa } from '@/types/rutas';
 import { verificarSaludBackend } from '@/services/ruteoService';
-import { calcularUltimasCargasAeropuertos } from '@/utils/capacidad';
+import { calcularUltimasCargasAeropuertos, calcularCargaAeropuertoActual } from '@/utils/capacidad';
+import {
+  IconPackage, IconBuilding, IconSettings, IconScreen, IconPlane, IconClipboard,
+  IconPlay, IconPause, IconStop, IconClose, IconRefresh, IconChart, IconMap,
+  IconWarehouse, IconCheck,
+} from '@/components/icons';
 
 const MapaRutas = dynamic(() => import('@/components/MapaRutas'), {
   ssr: false,
   loading: () => (
     <div className="flex flex-col items-center justify-center h-full rounded-lg bg-[#0f1f3d]/50 border border-slate-700/50">
-      <div className="text-4xl mb-3 animate-spin">🗺️</div>
+      <IconMap className="mb-3 text-cyan-400/60 animate-pulse" size={40} />
       <p className="text-slate-400 text-sm">Cargando mapa...</p>
     </div>
   ),
 });
 
 // ── Tipos de tabs ──
-type TabId = 'pedidos' | 'aeropuertos' | 'simulacion' | 'pantalla' | 'vuelos';
+type TabId = 'pedidos' | 'aeropuertos' | 'simulacion' | 'pantalla' | 'vuelos' | 'administracion';
 const MAP_FRAME_INTERVAL_MS = 1000 / 30;
 
-function PantallaIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
-      <rect x="3" y="4" width="18" height="12" rx="2" fill="none" stroke="currentColor" strokeWidth="2" />
-      <path d="M9 20h6M12 16v4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 const FILTROS_AVIONES_INICIALES: FiltrosAvionesMapa = {
-  usarOrigen: true,
+  usarOrigen: false,
   usarDestino: false,
   origenes: [],
   destinos: [],
 };
 
-function crearFiltrosAvionesPorDefecto(aeropuertos: AeropuertoDTO[]): FiltrosAvionesMapa {
-  return {
-    ...FILTROS_AVIONES_INICIALES,
-    origenes: aeropuertos[0] ? [aeropuertos[0].codigo] : [],
-  };
-}
-
 const NAV_TABS: { id: TabId; icon: ReactNode; label: string; color: string }[] = [
-  { id: 'pedidos',      icon: '📦', label: 'Pedidos',      color: 'blue'    },
-  { id: 'aeropuertos',  icon: '🏢', label: 'Aeropuertos',  color: 'emerald' },
-  { id: 'simulacion',   icon: '⚙️', label: 'Simulación',   color: 'violet'  },
-  { id: 'pantalla',     icon: <PantallaIcon />, label: 'Pantalla', color: 'cyan' },
-  { id: 'vuelos',       icon: '✈️', label: 'Vuelos',       color: 'orange'  },
+  { id: 'pedidos',        icon: <IconPackage size={20} />,    label: 'Pedidos',     color: 'blue'    },
+  { id: 'aeropuertos',    icon: <IconBuilding size={20} />,   label: 'Aeropuertos', color: 'emerald' },
+  { id: 'simulacion',     icon: <IconSettings size={20} />,   label: 'Simulación',  color: 'violet'  },
+  { id: 'pantalla',       icon: <IconScreen size={20} />,     label: 'Pantalla',    color: 'cyan'    },
+  { id: 'vuelos',         icon: <IconPlane size={20} />,      label: 'Vuelos',      color: 'orange'  },
+  { id: 'administracion', icon: <IconClipboard size={20} />,  label: 'Maestros',    color: 'rose'    },
 ];
+
+// ── Helper: tiempo transcurrido legible ──
+function formatTiempoTranscurrido(minutos: number): string {
+  const m    = Math.floor(minutos);
+  const dias  = Math.floor(m / 1440);
+  const horas = Math.floor((m % 1440) / 60);
+  const mins  = m % 60;
+  if (dias > 0)  return `${dias}d ${horas}h ${mins}m`;
+  if (horas > 0) return `${horas}h ${mins}m`;
+  return `${mins}m`;
+}
 
 // ── Helper: fecha de simulación ──
 function formatFechaSimulacion(fechaInicioRaw: string, simDia: number): string {
@@ -94,6 +96,38 @@ function getDiasRango(fechaInicioRaw?: string, fechaFinRaw?: string): number | n
 
   const MS_POR_DIA = 24 * 60 * 60 * 1000;
   return Math.floor((fin.getTime() - inicio.getTime()) / MS_POR_DIA);
+}
+
+const DURACION_ANIM_MIN = 5;
+const DURACION_ANIM_MAX = 90;
+const DURACION_ANIM_STEP = 5;
+
+function calcularMaxTotalMinutos(
+  resultado: RutaResponse | null,
+  maxSimDia: number | null,
+  maxTimelineMinutos: number | null,
+): number | null {
+  const diasSimulados = resultado?.cancelacionesPorDiaSA?.length ?? 0;
+  if (resultado && (resultado.escenario === 2 || resultado.escenario === 3) && diasSimulados > 0) {
+    return diasSimulados * 1440;
+  }
+  if (maxSimDia !== null) return (maxSimDia + 1) * 1440;
+  return maxTimelineMinutos;
+}
+
+function aplicarFechasSimulacion(
+  res: RutaResponse,
+  setInicio: (v: string) => void,
+  setFin: (v: string) => void,
+  fechaInicioUsuario?: string,
+) {
+  if (res.escenario === 2 || res.escenario === 3) {
+    setInicio(res.fechaInicio || fechaInicioUsuario || '');
+    setFin(res.fechaFin || '');
+    return;
+  }
+  setInicio(fechaInicioUsuario || res.fechaInicio || '');
+  setFin(res.fechaFin || '');
 }
 
 function getTimelineMaxMinutos(resultado: RutaResponse | null): number | null {
@@ -159,17 +193,22 @@ function combineChunks(chunks: RutaResponse[] | undefined): RutaResponse | null 
 // ── Panel ⚙️ Simulación — solo umbrales y reinicio ──────────────────────────
 function SimulacionPanel({
   umbralVerde, umbralAmbar, onUmbralVerde, onUmbralAmbar, onReiniciar,
+  duracionAnimacionMinutos, onDuracionAnimacion, escenario, diasSimulados,
 }: {
   umbralVerde: number;
   umbralAmbar: number;
   onUmbralVerde: (v: number) => void;
   onUmbralAmbar: (v: number) => void;
   onReiniciar: () => void;
+  duracionAnimacionMinutos: number;
+  onDuracionAnimacion: (v: number) => void;
+  escenario: number;
+  diasSimulados: number;
 }) {
   return (
     <div className="flex flex-col h-full p-4 space-y-5 overflow-y-auto custom-scrollbar">
       {/* Umbral de Capacidad */}
-      <div className="bg-slate-900/60 border border-slate-700/50 rounded-xl p-4">
+      <div className="bg-slate-900/40 border border-slate-700/50 rounded-xl p-4 backdrop-blur-sm">
         <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-3">Umbral de Capacidad</p>
         <div className="space-y-3">
           <div className="flex items-center gap-3">
@@ -201,6 +240,34 @@ function SimulacionPanel({
         </div>
       </div>
 
+      <div className="bg-slate-900/40 border border-slate-700/50 rounded-xl p-4 backdrop-blur-sm">
+        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-3">Velocidad de Animación</p>
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[10px] text-slate-400">Tiempo real para completar</span>
+          <span className="text-xs font-bold text-violet-300 bg-violet-500/15 border border-violet-400/30 px-2 py-0.5 rounded">
+            {duracionAnimacionMinutos} min
+          </span>
+        </div>
+        <input
+          type="range"
+          min={DURACION_ANIM_MIN}
+          max={DURACION_ANIM_MAX}
+          step={DURACION_ANIM_STEP}
+          value={duracionAnimacionMinutos}
+          onChange={e => onDuracionAnimacion(Number(e.target.value))}
+          className="w-full h-1 cursor-pointer accent-violet-400"
+        />
+        <div className="flex justify-between text-[9px] text-slate-500 mt-1">
+          <span>{DURACION_ANIM_MIN}m (rápido)</span>
+          <span>{DURACION_ANIM_MAX}m</span>
+        </div>
+        {escenario !== 1 && diasSimulados > 0 && (
+          <p className="text-[9px] text-slate-500 mt-2">
+            {diasSimulados} días simulados · ~{((duracionAnimacionMinutos * 60) / diasSimulados).toFixed(1)}s reales por día
+          </p>
+        )}
+      </div>
+
       <div className="border-t border-slate-700/50" />
 
       <button
@@ -208,7 +275,7 @@ function SimulacionPanel({
         className="w-full flex items-center justify-center gap-2 py-3 rounded-lg border border-slate-600/50
                    text-sm text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 hover:border-slate-500 transition-all"
       >
-        <span>🔄</span> Cargar nuevos datos
+        <IconRefresh size={16} /> Cargar nuevos datos
       </button>
     </div>
   );
@@ -248,8 +315,11 @@ export default function Home() {
   const [umbralAmbar, setUmbralAmbar] = useState(70);
   const maxSimDia = getDiasRango(fechaInicioRaw, fechaFinRaw);
   const maxTimelineMinutos = useMemo(() => getTimelineMaxMinutos(resultado), [resultado]);
-  // El limite total es (maxSimDia + 1) días completos; +1 para que el último día se complete
-  const maxTotalMinutos   = maxSimDia !== null ? (maxSimDia + 1) * 1440 : maxTimelineMinutos;
+  const diasSimulados = resultado?.cancelacionesPorDiaSA?.length ?? 0;
+  const maxTotalMinutos = useMemo(
+    () => calcularMaxTotalMinutos(resultado, maxSimDia, maxTimelineMinutos),
+    [resultado, maxSimDia, maxTimelineMinutos],
+  );
   const avanceMinutosPorSegundo = maxTotalMinutos !== null
     ? maxTotalMinutos / Math.max(1, duracionAnimacionMinutos * 60)
     : 60;
@@ -270,6 +340,20 @@ export default function Home() {
     [rangoFinalizado, rutasParaCargaFinal]
   );
 
+  // ── Indicadores globales (almacenes) ──
+  const globalStatsAeropuertos = useMemo(() => {
+    if (!resultado) return null;
+    let totalCarga    = 0;
+    let totalCapacidad = 0;
+    for (const a of resultado.aeropuertos) {
+      const carga = cargasAeropuertoFinales?.[a.codigo]
+        ?? calcularCargaAeropuertoActual(a.codigo, rutasActivas, simTotalVisual);
+      totalCarga    += carga;
+      totalCapacidad += a.capacidadMax;
+    }
+    return { carga: totalCarga, capacidad: totalCapacidad };
+  }, [resultado, cargasAeropuertoFinales, rutasActivas, simTotalVisual]);
+
   // Derivados del contador visual: al finalizar conserva la última ocupación del rango
   const simDia           = Math.floor(simTotalVisual / 1440);
   const simHoraMinutos   = simTotalVisual % 1440;
@@ -286,9 +370,10 @@ export default function Home() {
 
   const [filtrosAvionesMapa, setFiltrosAvionesMapa] = useState<FiltrosAvionesMapa>(FILTROS_AVIONES_INICIALES);
 
-  const inicializarFiltrosAvionesMapa = useCallback((_aeropuertos: AeropuertoDTO[]) => {
+  const inicializarFiltrosAvionesMapa = useCallback(() => {
     if (filtrosAvionesInicializadosRef.current) return;
     filtrosAvionesInicializadosRef.current = true;
+    setFiltrosAvionesMapa(FILTROS_AVIONES_INICIALES);
   }, []);
 
   // Timer — avanza con requestAnimationFrame y limita commits React para mantener fluida la UI.
@@ -390,12 +475,11 @@ export default function Home() {
               const res = combineChunks(resChunks);
               if (res) {
                 setResultado(res);
-                inicializarFiltrosAvionesMapa(res.aeropuertos || []);
+                inicializarFiltrosAvionesMapa();
                 setSimTotalMinutos(0);
                 // fechaInicioRaw ya fue seteado por onFechaInicio antes de ejecutar
                 // res.fechaFin es el último chunk en YYYYMMDD
-                setFechaInicioRaw(prev => prev || res.fechaInicio || '');
-                setFechaFinRaw(res.fechaFin || '');
+                aplicarFechasSimulacion(res, setFechaInicioRaw, setFechaFinRaw, fechaInicioRaw);
                 setIsPlaying(true);
               }
             }}
@@ -404,15 +488,12 @@ export default function Home() {
               if (res) {
                 if (!resultado) {
                   setResultado(res);
-                  inicializarFiltrosAvionesMapa(res.aeropuertos || []);
+                  inicializarFiltrosAvionesMapa();
                   setSimTotalMinutos(0);
-                  setFechaInicioRaw(prev => prev || res.fechaInicio || '');
-                  setFechaFinRaw(res.fechaFin || '');
+                  aplicarFechasSimulacion(res, setFechaInicioRaw, setFechaFinRaw, fechaInicioRaw);
                 } else {
                   setResultado(res);
-                  // Actualizar la fecha fin a medida que llegan chunks
-                  setFechaInicioRaw(prev => prev || res.fechaInicio || '');
-                  setFechaFinRaw(res.fechaFin || '');
+                  aplicarFechasSimulacion(res, setFechaInicioRaw, setFechaFinRaw, fechaInicioRaw);
                 }
               }
             }}
@@ -458,7 +539,7 @@ export default function Home() {
         <img src="/logo.png" alt="LoadRoute Logo" className="h-8 shrink-0" />
         <div className="w-px h-6 bg-slate-700/60 shrink-0" />
 
-        {/* Fecha simulada + GMT */}
+        {/* Fecha simulada + GMT + Transcurrido + Progreso */}
         <div className="flex items-center gap-4 flex-1">
           <div className="flex flex-col justify-center">
             <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider leading-none mb-0.5">Simulación</span>
@@ -472,9 +553,34 @@ export default function Home() {
               {formatoHora(simHoraMinutos)}
             </span>
           </div>
+
+          {/* Tiempo transcurrido */}
+          <div className="flex flex-col justify-center">
+            <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider leading-none mb-0.5">Transcurrido</span>
+            <span className="text-xs font-mono text-indigo-300 leading-none">
+              {formatTiempoTranscurrido(simTotalVisual)}
+            </span>
+          </div>
+
+          {/* Barra de progreso */}
+          {maxTotalMinutos !== null && maxTotalMinutos > 0 && (
+            <div className="flex flex-col justify-center w-20">
+              <div className="flex justify-between text-[9px] text-slate-500 mb-1">
+                <span>Progreso</span>
+                <span>{Math.min(Math.round((simTotalVisual / maxTotalMinutos) * 100), 100)}%</span>
+              </div>
+              <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-blue-600 to-cyan-400 rounded-full transition-all duration-300"
+                  style={{ width: `${Math.min((simTotalVisual / maxTotalMinutos) * 100, 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
+
           {rangoFinalizado && (
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-              ✓ Finalizado
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+              <IconCheck size={12} /> Finalizado
             </span>
           )}
 
@@ -489,7 +595,7 @@ export default function Home() {
                 ${isPlaying || rangoFinalizado
                   ? 'bg-slate-800/50 text-slate-600 cursor-not-allowed'
                   : 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 hover:text-emerald-300 ring-1 ring-emerald-500/30'}`}
-            >▶</button>
+            ><IconPlay size={14} /></button>
             <button
               id="btn-pause"
               onClick={() => setIsPlaying(false)}
@@ -499,14 +605,14 @@ export default function Home() {
                 ${!isPlaying
                   ? 'bg-slate-800/50 text-slate-600 cursor-not-allowed'
                   : 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 hover:text-amber-300 ring-1 ring-amber-500/30'}`}
-            >⏸</button>
+            ><IconPause size={14} /></button>
             <button
               id="btn-stop"
               onClick={handleStop}
               title="Detener y reiniciar tiempo"
               className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold transition-all
                 bg-slate-800/50 text-slate-400 hover:bg-red-500/20 hover:text-red-400 ring-1 ring-slate-700/50"
-            >⏹</button>
+            ><IconStop size={14} /></button>
           </div>
         </div>
 
@@ -533,21 +639,22 @@ export default function Home() {
       <div className="flex flex-1 overflow-hidden">
 
         {/* ── NAV STRIP (56px, siempre visible, fuera del área del mapa) ── */}
-        <nav className="w-14 bg-[#0c1a30] border-r border-slate-700/50 flex flex-col items-center py-4 gap-2 shrink-0 z-30">
+        <nav className="w-14 bg-[#0c1a30]/95 backdrop-blur-sm border-r border-slate-700/50 flex flex-col items-center py-4 gap-2 shrink-0 z-30">
           {NAV_TABS.map(tab => {
             const isActive = activeTab === tab.id;
-            const activeColors: Record<string, string> = {
-              blue:    'bg-blue-500/20 text-blue-400 shadow-blue-500/20',
-              emerald: 'bg-emerald-500/20 text-emerald-400 shadow-emerald-500/20',
-              violet:  'bg-violet-500/20 text-violet-400 shadow-violet-500/20',
-              cyan:    'bg-cyan-500/20 text-cyan-300 shadow-cyan-500/20',
-              orange:  'bg-orange-500/20 text-orange-400 shadow-orange-500/20',
-            };
+              const activeColors: Record<string, string> = {
+                blue:    'bg-blue-500/20 text-blue-400 shadow-blue-500/20',
+                emerald: 'bg-emerald-500/20 text-emerald-400 shadow-emerald-500/20',
+                violet:  'bg-violet-500/20 text-violet-400 shadow-violet-500/20',
+                cyan:    'bg-cyan-500/20 text-cyan-300 shadow-cyan-500/20',
+                orange:  'bg-orange-500/20 text-orange-400 shadow-orange-500/20',
+                rose:    'bg-rose-500/20 text-rose-400 shadow-rose-500/20',
+              };
             return (
               <div key={tab.id} className="relative group">
                 <button
                   onClick={() => handleTabClick(tab.id)}
-                  className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl transition-all duration-200
+                  className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200
                     ${isActive
                       ? `${activeColors[tab.color]} shadow-lg ring-1 ring-current/20`
                       : 'text-slate-500 hover:text-slate-200 hover:bg-slate-700/60'}`}
@@ -584,14 +691,48 @@ export default function Home() {
             filtrosAviones={filtrosAvionesMapa}
           />
 
+          {/* ── INDICADORES GLOBALES (flotante, esquina inferior-izquierda del mapa) ── */}
+          {globalStatsAeropuertos && globalStatsAeropuertos.capacidad > 0 && (
+            <div className="absolute bottom-10 left-20 z-[500] pointer-events-none">
+              <div className="bg-[#0c1a30]/90 border border-slate-700/50 rounded-xl px-3 py-2.5 backdrop-blur-sm min-w-[190px]">
+                <p className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Ocupación Global</p>
+                {(() => {
+                  const pct = Math.round((globalStatsAeropuertos.carga / globalStatsAeropuertos.capacidad) * 100);
+                  const color = pct > umbralAmbar ? 'text-red-400'   : pct > umbralVerde ? 'text-amber-400'  : 'text-emerald-400';
+                  const bg    = pct > umbralAmbar ? 'bg-red-500'     : pct > umbralVerde ? 'bg-amber-500'   : 'bg-emerald-500';
+                  const dotColor = pct > umbralAmbar ? 'bg-red-500' : pct > umbralVerde ? 'bg-amber-500' : 'bg-emerald-500';
+                  return (
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                          <IconWarehouse size={12} /> Almacenes
+                        </span>
+                        <span className={`text-[10px] font-bold ${color} flex items-center gap-1`}>
+                          <span className={`w-2 h-2 rounded-full ${dotColor}`} /> {pct}%
+                        </span>
+                      </div>
+                      <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden mb-1">
+                        <div className={`h-full rounded-full transition-all duration-500 ${bg}`} style={{ width: `${Math.min(pct,100)}%` }} />
+                      </div>
+                      <p className="text-[9px] text-slate-500">
+                        {globalStatsAeropuertos.carga.toLocaleString()} / {globalStatsAeropuertos.capacidad.toLocaleString()} maletas
+                      </p>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
+
           {/* ── PANEL LATERAL IZQUIERDO — flotante, no afecta el ancho del mapa ── */}
           <div
             className="absolute top-0 left-0 h-full z-[1000] overflow-hidden pointer-events-none"
-            style={{ width: activeTab ? '320px' : '0px', transition: 'width 0.25s ease' }}
+            style={{ width: activeTab ? (activeTab === 'administracion' ? '600px' : '320px') : '0px', transition: 'width 0.25s ease' }}
           >
-            <div className="pointer-events-auto w-80 h-full bg-[#0c1a30]/95 border-r border-slate-700/50 backdrop-blur-sm flex flex-col">
+            <div className="pointer-events-auto h-full bg-[#0c1a30]/95 border-r border-slate-700/50 backdrop-blur-sm flex flex-col"
+                 style={{ width: activeTab === 'administracion' ? '600px' : '320px' }}>
               {/* Header del panel con botón cerrar */}
-              <div className="px-4 py-3 bg-[#0f1f3d] border-b border-slate-700/50 shrink-0 flex items-center justify-between">
+              <div className="px-4 py-3 bg-[#0f1f3d]/80 border-b border-slate-700/50 shrink-0 flex items-center justify-between backdrop-blur-sm">
                 <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
                   {NAV_TABS.find(t => t.id === activeTab)?.label ?? ''}
                 </span>
@@ -600,7 +741,7 @@ export default function Home() {
                   className="text-slate-600 hover:text-slate-300 text-lg leading-none transition-colors"
                   aria-label="Cerrar panel"
                 >
-                  ✕
+                  <IconClose size={18} />
                 </button>
               </div>
               {/* Contenido */}
@@ -623,6 +764,10 @@ export default function Home() {
                     onUmbralVerde={handleUmbralVerde}
                     onUmbralAmbar={handleUmbralAmbar}
                     onReiniciar={handleReiniciar}
+                    duracionAnimacionMinutos={duracionAnimacionMinutos}
+                    onDuracionAnimacion={setDuracionAnimacionMinutos}
+                    escenario={resultado.escenario}
+                    diasSimulados={diasSimulados}
                   />
                 )}
                 {activeTab === 'pantalla' && (
@@ -637,8 +782,20 @@ export default function Home() {
                     vuelos={resultado.vuelosMaestros || []}
                     cancelacionesPorDia={resultado.cancelacionesPorDiaSA || []}
                     simDia={simDia}
-                    maxDia={Math.max(0, (resultado.cancelacionesPorDiaSA?.length || 1) - 1)}
+                    maxDia={
+                      diasSimulados > 0
+                        ? diasSimulados - 1
+                        : maxSimDia !== null
+                          ? maxSimDia
+                          : 0
+                    }
+                    rutasActivas={rutasActivas}
+                    umbralVerde={umbralVerde}
+                    umbralAmbar={umbralAmbar}
                   />
+                )}
+                {activeTab === 'administracion' && (
+                  <AdminPanel />
                 )}
               </div>
             </div>
@@ -655,8 +812,8 @@ export default function Home() {
             >
               <div className="p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                    📊 Panel de Resultados
+                  <p className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                    <IconChart size={14} className="text-blue-400" /> Panel de Resultados
                   </p>
                 </div>
                 <ResultadosPanel
@@ -665,6 +822,7 @@ export default function Home() {
                   escenario={resultado.escenario}
                   totalVuelos={resultado.totalVuelos}
                   totalEnvios={resultado.totalEnviosCargados}
+                  resultadoCompleto={resultado}
                 />
               </div>
             </div>

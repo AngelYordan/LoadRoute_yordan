@@ -2,6 +2,7 @@ package com.loadroute.service;
 
 import com.loadroute.dto.RutaResponseDTO;
 import com.loadroute.dto.SimulacionJobDTO;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -32,9 +33,11 @@ public class RuteoAsyncJobService {
     private final ScheduledExecutorService cleanupExecutor = Executors.newSingleThreadScheduledExecutor();
     private final Map<String, SimulacionJobDTO> jobs = new ConcurrentHashMap<>();
     private final Map<String, Long> finishedAt = new ConcurrentHashMap<>();
+    private final SimpMessagingTemplate messagingTemplate;
 
-    public RuteoAsyncJobService(RuteoAlgoritmoService ruteoService) {
+    public RuteoAsyncJobService(RuteoAlgoritmoService ruteoService, SimpMessagingTemplate messagingTemplate) {
         this.ruteoService = ruteoService;
+        this.messagingTemplate = messagingTemplate;
         cleanupExecutor.scheduleAtFixedRate(this::cleanupExpiredJobs, 5, 5, TimeUnit.MINUTES);
     }
 
@@ -81,6 +84,7 @@ public class RuteoAsyncJobService {
                     current.setProgress(100);
                     current.setMessage("Simulacion completada.");
                     finishedAt.put(jobId, System.currentTimeMillis());
+                    messagingTemplate.convertAndSend("/topic/simulacion", "{\"event\": \"SIMULACION_FINALIZADA\", \"jobId\": \"" + jobId + "\"}");
                 }
             } catch (Exception e) {
                 SimulacionJobDTO current = jobs.get(jobId);
@@ -90,6 +94,7 @@ public class RuteoAsyncJobService {
                     current.setMessage("La simulacion fallo.");
                     current.setError(e.getMessage());
                     finishedAt.put(jobId, System.currentTimeMillis());
+                    messagingTemplate.convertAndSend("/topic/simulacion", "{\"event\": \"SIMULACION_ERROR\", \"jobId\": \"" + jobId + "\"}");
                 }
             }
         });

@@ -6,8 +6,12 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'], weight: ['300', '400', '500', '600', '700'] })
 
 export const metadata: Metadata = {
-  title: 'Tasf.B2B Logistics — Sistema de Ruteo',
+  title: 'LoadRoute',
   description: 'Sistema de Planificación y Ruteo Logístico de Equipaje — Simulated Annealing & ALNS',
+  icons: {
+    icon: '/favicon.svg',
+    apple: '/favicon.svg',
+  },
 }
 
 export default function RootLayout({

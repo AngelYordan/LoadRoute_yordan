@@ -3,14 +3,14 @@ spring:
     name: loadroute-backend
 
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/loadroute}
-    username: ${DB_USERNAME:postgres}
-    password: ${DB_PASSWORD:}
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/loadroute_db}
+    username: ${DB_USERNAME:loadroute_user}
+    password: ${DB_PASSWORD:password123}
     driver-class-name: org.postgresql.Driver
 
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: create
     show-sql: false
     properties:
       hibernate:

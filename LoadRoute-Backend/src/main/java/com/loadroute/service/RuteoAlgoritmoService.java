@@ -125,10 +125,14 @@ public class RuteoAlgoritmoService {
 
         LocalDateTime fechaInicioRango    = parsearFechaInicio(fechaInicio);
         LocalDate     fechaInicioRangoDia = fechaInicioRango.toLocalDate();
+        // E2/E3: el día 0 de la animación es el primer día con envíos, no 1900-01-01 ni huecos previos al rango
+        LocalDate     fechaBaseDiaria     = enviosPorDia.keySet().stream()
+                .min(LocalDate::compareTo)
+                .orElse(fechaInicioRangoDia);
         List<RutaResponseDTO> chunks;
         switch (escenario) {
-            case 2  -> chunks = ejecutarEscenario2(enviosPorDia, aeropuertos.values(), vuelos, response, progress, fechaInicioRangoDia);
-            case 3  -> chunks = ejecutarEscenario3(enviosPorDia, aeropuertos.values(), vuelos, response, progress, fechaInicioRangoDia);
+            case 2  -> chunks = ejecutarEscenario2(enviosPorDia, aeropuertos.values(), vuelos, response, progress, fechaBaseDiaria);
+            case 3  -> chunks = ejecutarEscenario3(enviosPorDia, aeropuertos.values(), vuelos, response, progress, fechaBaseDiaria);
             default -> chunks = ejecutarEscenario1(enviosPorLotePeriodo, aeropuertos.values(), vuelos, response, progress, fechaInicioRango);
         }
 

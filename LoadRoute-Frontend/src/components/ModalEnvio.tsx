@@ -1,5 +1,6 @@
 import React from 'react';
 import { RutaMuestra } from '@/types/rutas';
+import { IconClose } from '@/components/icons';
 
 interface ModalEnvioProps {
   envio: RutaMuestra | null;
@@ -23,7 +24,7 @@ export default function ModalEnvio({ envio, onClose }: ModalEnvioProps) {
             onClick={onClose}
             className="text-slate-400 hover:text-white p-2 rounded-lg hover:bg-slate-700/50 transition-colors"
           >
-            ✕
+            <IconClose size={18} />
           </button>
         </div>
 

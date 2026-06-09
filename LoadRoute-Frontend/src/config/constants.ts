@@ -8,4 +8,6 @@ export const API_ENDPOINTS = {
   SIMULAR: `${BACKEND_URL}/api/rutas/simular`,
   SIMULAR_ASYNC: `${BACKEND_URL}/api/rutas/simular-async`,
   HEALTH: `${BACKEND_URL}/api/rutas/health`,
+  AEROPUERTOS: `${BACKEND_URL}/api/aeropuertos`,
+  VUELOS: `${BACKEND_URL}/api/vuelos`,
 };

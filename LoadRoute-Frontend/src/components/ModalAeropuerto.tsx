@@ -1,5 +1,6 @@
 import { AeropuertoDTO, RutaMuestra } from '@/types/rutas';
-import { calcularCargaAeropuertoActual } from '@/utils/capacidad';
+import { calcularCargaAeropuertoActual, porcentajeOcupacion, formatPorcentaje } from '@/utils/capacidad';
+import { IconBuilding, IconClose } from '@/components/icons';
 
 interface ModalAeropuertoProps {
   aeropuerto: AeropuertoDTO | null;
@@ -23,7 +24,7 @@ export default function ModalAeropuerto({
     ?? (rutasActivas && simTiempoMinutos !== undefined
       ? calcularCargaAeropuertoActual(aeropuerto.codigo, rutasActivas, simTiempoMinutos)
       : 0);
-  const porcentaje = Math.min((cargaActual / Math.max(aeropuerto.capacidadMax, 1)) * 100, 100).toFixed(1);
+  const porcentaje = formatPorcentaje(porcentajeOcupacion(cargaActual, aeropuerto.capacidadMax));
 
   return (
     <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -32,7 +33,9 @@ export default function ModalAeropuerto({
         {/* Header */}
         <div className="flex justify-between items-center p-5 border-b border-slate-700/50">
           <div className="flex items-center gap-3">
-            <span className="text-3xl">🏢</span>
+            <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+              <IconBuilding size={22} />
+            </div>
             <div>
               <h2 className="text-lg font-bold text-slate-100">{aeropuerto.codigo}</h2>
               <p className="text-xs text-slate-400">{aeropuerto.ciudad}, {aeropuerto.pais}</p>
@@ -42,7 +45,7 @@ export default function ModalAeropuerto({
             onClick={onClose}
             className="text-slate-400 hover:text-white p-2 rounded-lg hover:bg-slate-700/50 transition-colors"
           >
-            ✕
+            <IconClose size={18} />
           </button>
         </div>
 
