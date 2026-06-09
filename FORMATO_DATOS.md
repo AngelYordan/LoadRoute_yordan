@@ -73,13 +73,15 @@ id_envío-aaaammdd-hh-mm-dest-###-IdCliente
 **Estructura en Base de Datos:**
 ```sql
 envios (
-  id SERIAL PRIMARY KEY,
-  aeropuerto_origen_id BIGINT REFERENCES aeropuertos(id),        -- SKBO (siempre)
-  aeropuerto_destino_id BIGINT REFERENCES aeropuertos(id),       -- dest
-  cantidad_maletas INTEGER NOT NULL,                              -- ###
-  fecha_creacion TIMESTAMP DEFAULT NOW(),                         -- aaaammdd hh:mm
-  cliente_id VARCHAR(7),                                          -- IdCliente (futuro)
-  numero_pedido VARCHAR(8)                                        -- id_envío (futuro)
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  clave_compuesta VARCHAR(255) NOT NULL UNIQUE,
+  cliente_id VARCHAR(255),
+  origen_id BIGINT NOT NULL,
+  destino_id BIGINT NOT NULL,
+  fecha_creacion DATETIME(6) NOT NULL,
+  cantidad_maletas INT NOT NULL,
+  FOREIGN KEY (origen_id) REFERENCES aeropuertos(id),
+  FOREIGN KEY (destino_id) REFERENCES aeropuertos(id)
 )
 ```
 
@@ -124,11 +126,15 @@ class Envio {
 
 ---
 
-## 📊 Datos Cargados en init.sql
+## 📊 Base MySQL
 
-**Aeropuertos:** 7 (Sudamérica)
-**Vuelos:** 16 (plan de vuelo)
-**Envíos:** 6 (ejemplos de carga)
+El esquema oficial esta en:
+
+```text
+LoadRoute-Backend/src/main/resources/db/mysql/schema.sql
+```
+
+El backend carga/reemplaza `aeropuertos`, `vuelos` y `envios` desde los archivos enviados por el frontend.
 
 ---
 
@@ -136,12 +142,12 @@ class Envio {
 
 ```
 1. User abre http://localhost:3000
-2. Frontend hace GET /api/rutas/sa
-3. Backend SimulatedAnnealingService querys:
+2. Frontend hace POST /api/rutas/simular-async con FormData
+3. Backend guarda o reemplaza los archivos en MySQL y consulta:
    - SELECT * FROM aeropuertos
    - SELECT * FROM vuelos
    - SELECT * FROM envios
-4. Genera una ruta optimizada (mock)
+4. Genera rutas optimizadas con Simulated Annealing
 5. Retorna RutaResponseDTO con:
    - algoritmo: "SIMULATED_ANNEALING"
    - vuelos: [ {origen: SKBO, destino: SEQM, ...}, ... ]
@@ -156,11 +162,11 @@ class Envio {
 
 ## 🎯 Próximas Integraciones
 
-### Fase 2: Carga de Envíos
-- API endpoint: `POST /api/envios/cargar`
-- Acepta archivo CSV o JSON con lista de envíos
+### Carga de Envíos
+- API endpoint actual: `POST /api/rutas/simular-async`
+- Acepta archivos `.txt` multipart
 - Formato: id_envío-aaaammdd-hh-mm-dest-###-IdCliente
-- Almacena en tabla `envios`
+- Almacena en tabla `envios` de MySQL
 
 ### Fase 3: Optimización Real
 - `SimulatedAnnealingService`: Implementa lógica verdadera
