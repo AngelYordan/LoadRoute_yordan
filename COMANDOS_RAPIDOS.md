@@ -17,22 +17,16 @@ Si falta algo, instala desde: https://www.oracle.com/java/technologies/downloads
 
 ---
 
-## 🚀 OPCIÓN A: CON BASE DE DATOS (PostgreSQL)
+## 🚀 OPCIÓN ÚNICA: CON BASE DE DATOS MySQL
 
-### PASO 1: Base de Datos (Primera Vez Solamente)
+### PASO 1: Configurar conexión MySQL
 
 ```powershell
-# Abre PowerShell como Admin y ejecuta:
-
-# Si tienes PostgreSQL instalado:
-psql -U postgres
-
-# Luego en la terminal psql:
-CREATE DATABASE loadroute_db;
-CREATE USER loadroute_user WITH PASSWORD 'password123';
-GRANT ALL PRIVILEGES ON DATABASE loadroute_db TO loadroute_user;
-\q
+cd "C:\Users\BRAULIO\Desktop\Github-R\LoadRoute\LoadRoute-Backend"
+Copy-Item .env.example .env
 ```
+
+Edita `.env` con `DB_URL`, `DB_USERNAME` y `DB_PASSWORD` de tu base local o de pruebas.
 
 ### PASO 2: Backend
 
@@ -59,61 +53,6 @@ npm run dev
 **Espera a ver:** `ready on http://0.0.0.0:3000`
 
 ### PASO 4: Abre el navegador
-
-```
-http://localhost:3000
-```
-
-✅ **¡Listo!**
-
----
-
-## 🚀 OPCIÓN B: SIN BASE DE DATOS (H2 - En Memoria)
-
-Más rápido si no tienes PostgreSQL instalado.
-
-### PASO 1: Configurar Backend para H2
-
-Edita: `LoadRoute-Backend/src/main/resources/application.yml`
-
-```yaml
-# Reemplaza la sección "spring:" con:
-spring:
-  datasource:
-    url: jdbc:h2:mem:loadroute
-    driver-class-name: org.h2.Driver
-    username: sa
-    password:
-  jpa:
-    database-platform: org.hibernate.dialect.H2Dialect
-    hibernate:
-      ddl-auto: create-drop
-  h2:
-    console:
-      enabled: true
-```
-
-### PASO 2: Backend
-
-```powershell
-cd "C:\Users\BRAULIO\Desktop\Github-R\LoadRoute\LoadRoute-Backend"
-
-mvn clean compile
-
-mvn spring-boot:run
-```
-
-### PASO 3: Frontend (Otra terminal)
-
-```powershell
-cd "C:\Users\BRAULIO\Desktop\Github-R\LoadRoute\LoadRoute-Frontend"
-
-npm install
-
-npm run dev
-```
-
-### PASO 4: Navegador
 
 ```
 http://localhost:3000
@@ -164,7 +103,7 @@ http://localhost:3000
 |-------|----------|
 | `Port 8080 already in use` | `netstat -ano \| findstr :8080` → `taskkill /PID <num> /F` |
 | `Cannot find module` | `npm install` (en carpeta frontend) |
-| `Database connection failed` | Usa Opción B (H2) sin BD |
+| `Database connection failed` | Verifica red, credenciales MySQL y las variables `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` |
 | `maven command not found` | Instala Maven o usa `mvn.cmd` |
 
 ---

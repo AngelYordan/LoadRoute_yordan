@@ -112,6 +112,7 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
   const [horaFin,                setHoraFin]                = useState('23:59');
   const [ejecutando,             setEjecutando]             = useState(false);
   const [progreso,               setProgreso]               = useState<SimulacionJob | null>(null);
+  const [cargaDatosAbierta,      setCargaDatosAbierta]      = useState(false);
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const duracion = useMemo(
@@ -120,6 +121,8 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
   );
 
   const fechaFinMinima = fechaInicio || undefined;
+  const esSimulacionPeriodo = escenario === 1;
+  const archivosCargados = Object.values(archivos).filter(state => state.files.length > 0).length;
 
   const handleFileChange = useCallback((key: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const fileList = e.target.files;
@@ -151,7 +154,7 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
     setEjecutando(true);
     onCargando(true);
     onError('');
-    onDuracionSimulacion?.(duracionPeriodoMinutos);
+    onDuracionSimulacion?.(esSimulacionPeriodo ? duracionPeriodoMinutos : duracionAnimacionPorDefecto(escenario));
     setProgreso({ jobId: '', status: 'PENDING', progress: 0, message: 'Preparando simulacion...' });
     try {
       const resultado = await ejecutarSimulacion(
@@ -159,8 +162,8 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
         archivos.vuelos.files[0],
         archivos.envios.files,
         escenario,
-        fechaInicio ? toBackendDate(fechaInicio) : undefined,
-        fechaFin    ? toBackendDate(fechaFin)    : undefined,
+        esSimulacionPeriodo && fechaInicio ? toBackendDate(fechaInicio) : undefined,
+        esSimulacionPeriodo && fechaFin    ? toBackendDate(fechaFin)    : undefined,
         'sa',
         (job) => {
           setProgreso(job);
@@ -217,53 +220,75 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
         </div>
       </div>
 
-      {/* ── 2. Dos columnas: Archivos | Fechas ── */}
-      <div className="grid grid-cols-2 gap-4">
+      {/* ── 2. Configuracion contextual ── */}
+      <div className={esSimulacionPeriodo ? 'grid grid-cols-2 gap-4' : 'space-y-3'}>
 
         {/* Columna izquierda: Archivos */}
         <div>
-          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-            <span>📁</span> Carga de Datos <span className="text-slate-600 font-normal normal-case tracking-normal text-[10px] ml-1">(opcional)</span>
-          </h3>
-          <div className="space-y-2">
-            {FILE_CONFIGS.map(cfg => {
-              const state = archivos[cfg.key];
-              const hasFile = state.files.length > 0;
-              return (
-                <div
-                  key={cfg.key}
-                  onClick={() => fileRefs.current[cfg.key]?.click()}
-                  className={`relative cursor-pointer rounded-lg border-2 border-dashed px-3 py-2.5 transition-all duration-200
-                    ${hasFile
-                      ? 'border-emerald-500/50 bg-emerald-500/5'
-                      : 'border-slate-600/50 bg-slate-800/30 hover:border-blue-500/40 hover:bg-blue-500/5'
-                    }`}
-                >
-                  <input
-                    ref={el => { fileRefs.current[cfg.key] = el; }}
-                    type="file"
-                    accept={cfg.accept}
-                    onChange={(e) => handleFileChange(cfg.key, e)}
-                    multiple={cfg.key === 'envios'}
-                    {...(cfg.key === 'envios' ? { webkitdirectory: '' } : {})}
-                    className="hidden"
-                  />
-                  <div className="flex items-center gap-2">
-                    <span className="shrink-0">{hasFile ? <IconCheck size={18} className="text-emerald-400" /> : cfg.icon}</span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium text-slate-200 leading-tight">{cfg.label}</p>
-                      <p className="text-[10px] text-slate-400 truncate leading-tight mt-0.5">
-                        {hasFile ? state.name : cfg.desc}
-                      </p>
+          <button
+            type="button"
+            onClick={() => setCargaDatosAbierta(open => !open)}
+            className="w-full rounded-lg border border-slate-700/60 bg-slate-800/35 px-3 py-2.5 text-left transition-all hover:border-blue-500/40 hover:bg-blue-500/5"
+            aria-expanded={cargaDatosAbierta}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <span>📁</span> Carga de Datos
+                  <span className="text-slate-600 font-normal normal-case tracking-normal text-[10px] ml-1">(opcional)</span>
+                </h3>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  {archivosCargados > 0 ? `${archivosCargados} de 3 tipos cargados` : 'Aeropuertos, planes de vuelo y envios'}
+                </p>
+              </div>
+              <span className={`text-slate-400 transition-transform ${cargaDatosAbierta ? 'rotate-180' : ''}`} aria-hidden>
+                ▾
+              </span>
+            </div>
+          </button>
+
+          {cargaDatosAbierta && (
+            <div className="mt-2 space-y-2">
+              {FILE_CONFIGS.map(cfg => {
+                const state = archivos[cfg.key];
+                const hasFile = state.files.length > 0;
+                return (
+                  <div
+                    key={cfg.key}
+                    onClick={() => fileRefs.current[cfg.key]?.click()}
+                    className={`relative cursor-pointer rounded-lg border-2 border-dashed px-3 py-2.5 transition-all duration-200
+                      ${hasFile
+                        ? 'border-emerald-500/50 bg-emerald-500/5'
+                        : 'border-slate-600/50 bg-slate-800/30 hover:border-blue-500/40 hover:bg-blue-500/5'
+                      }`}
+                  >
+                    <input
+                      ref={el => { fileRefs.current[cfg.key] = el; }}
+                      type="file"
+                      accept={cfg.accept}
+                      onChange={(e) => handleFileChange(cfg.key, e)}
+                      multiple={cfg.key === 'envios'}
+                      {...(cfg.key === 'envios' ? { webkitdirectory: '' } : {})}
+                      className="hidden"
+                    />
+                    <div className="flex items-center gap-2">
+                      <span className="shrink-0">{hasFile ? <IconCheck size={18} className="text-emerald-400" /> : cfg.icon}</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-medium text-slate-200 leading-tight">{cfg.label}</p>
+                        <p className="text-[10px] text-slate-400 truncate leading-tight mt-0.5">
+                          {hasFile ? state.name : cfg.desc}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Columna derecha: Fechas + Hora + Duración */}
+        {esSimulacionPeriodo && (
         <div className="flex flex-col gap-2">
           <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
             <span>📅</span> Periodo
@@ -334,19 +359,11 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
             </p>
           ) : null}
 
-          {/* Duración animación (todos los escenarios) */}
-          <div className={`rounded-lg border p-3 mt-1 ${
-            escenario === 1
-              ? 'border-cyan-500/20 bg-cyan-500/5'
-              : 'border-violet-500/20 bg-violet-500/5'
-          }`}>
+          {/* Duración animación */}
+          <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3 mt-1">
             <div className="flex items-center justify-between mb-2">
               <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Duración Anim.</span>
-              <span className={`text-xs font-bold px-2 py-0.5 rounded border ${
-                escenario === 1
-                  ? 'text-cyan-100 bg-cyan-500/15 border-cyan-400/30'
-                  : 'text-violet-100 bg-violet-500/15 border-violet-400/30'
-              }`}>
+              <span className="text-xs font-bold px-2 py-0.5 rounded border text-cyan-100 bg-cyan-500/15 border-cyan-400/30">
                 {duracionPeriodoMinutos} min
               </span>
             </div>
@@ -357,19 +374,15 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
               step={DURACION_PERIODO_STEP}
               value={duracionPeriodoMinutos}
               onChange={e => setDuracionPeriodoMinutos(Number(e.target.value))}
-              className={`w-full cursor-pointer ${escenario === 1 ? 'accent-cyan-400' : 'accent-violet-400'}`}
+              className="w-full cursor-pointer accent-cyan-400"
             />
             <div className="flex justify-between text-[9px] font-medium text-slate-500 mt-1">
               <span>{DURACION_PERIODO_MIN}m (rápido)</span>
               <span>{DURACION_PERIODO_MAX}m</span>
             </div>
-            {escenario !== 1 && (
-              <p className="text-[9px] text-slate-500 mt-1.5">
-                Día a día / colapso: por defecto 15 min. Baja el valor para acelerar.
-              </p>
-            )}
           </div>
         </div>
+        )}
       </div>
 
       {/* ── 3. Botón Ejecutar ── */}
