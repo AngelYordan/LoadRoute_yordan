@@ -1,7 +1,7 @@
 # 🚀 GUÍA LOCAL: CÓMO LEVANTAR LoadRoute EN TU MÁQUINA
 
 **Sistema Operativo:** Windows  
-**Requisitos:** Java 17, Maven, Node.js 18+, PostgreSQL
+**Requisitos:** Java 17, Maven, Node.js 18+, MySQL
 
 ---
 
@@ -27,62 +27,28 @@ node -version
 npm -version
 # Debe mostrar: 9.x.x o superior
 
-# PostgreSQL (debe estar corriendo)
-# Verifica en Services (servicios de Windows)
+# MySQL disponible
+# Configurable con DB_URL, DB_USERNAME y DB_PASSWORD
 ```
 
 ### Si falta algo:
 - **Java 17:** https://jdk.java.net/17/
 - **Maven:** https://maven.apache.org/download.cgi
 - **Node.js:** https://nodejs.org/ (LTS recomendado)
-- **PostgreSQL:** https://www.postgresql.org/download/windows/
+- **MySQL:** https://dev.mysql.com/downloads/mysql/
 
 ---
 
 ## 🗄️ PASO 1: CONFIGURAR BASE DE DATOS
 
-### Opción A: PostgreSQL Local (Recomendado)
+### MySQL local o de pruebas
 
 ```powershell
-# 1. Abre pgAdmin o psql
-psql -U postgres
-
-# 2. Crea la BD
-CREATE DATABASE loadroute_db;
-
-# 3. Crea el usuario
-CREATE USER loadroute_user WITH PASSWORD 'password123';
-
-# 4. Otorga permisos
-GRANT ALL PRIVILEGES ON DATABASE loadroute_db TO loadroute_user;
-ALTER ROLE loadroute_user SET client_encoding TO 'utf8';
-ALTER ROLE loadroute_user SET default_transaction_isolation TO 'read committed';
-
-# 5. Sal
-\q
+cd LoadRoute-Backend
+Copy-Item .env.example .env
 ```
 
-### Opción B: H2 (En Memoria - Sin BD Externa)
-
-Si no quieres instalar PostgreSQL, puedes usar H2:
-
-Edita: `LoadRoute-Backend/src/main/resources/application.yml`
-
-```yaml
-spring:
-  datasource:
-    url: jdbc:h2:mem:loadroute
-    driver-class-name: org.h2.Driver
-    username: sa
-    password:
-  jpa:
-    database-platform: org.hibernate.dialect.H2Dialect
-    hibernate:
-      ddl-auto: create-drop
-  h2:
-    console:
-      enabled: true
-```
+Edita `.env` con los datos de tu base. El backend usa esos valores al iniciar.
 
 ---
 
@@ -345,23 +311,23 @@ npm run dev
 Invoke-WebRequest http://localhost:8080/ws -ErrorAction Ignore
 ```
 
-### PostgreSQL no conecta
+### MySQL no conecta
 
 ```powershell
 # Error: Connection refused
 # Solución:
-# 1. Verifica que PostgreSQL está corriendo:
-Get-Service -Name postgresql*
+# 1. Verifica que el host configurado responde:
+Test-NetConnection <host_mysql> -Port 3306
 
-# 2. Si no está:
-Start-Service -Name postgresql-x64-15
+# 2. Prueba credenciales:
+mysql -h <host_mysql> -P 3306 -u <usuario> -p <base>
 
 # 3. En application.yml, verifica:
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/loadroute_db
-    username: loadroute_user
-    password: password123
+    url: ${DB_URL:jdbc:mysql://localhost:3306/loadroute?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&rewriteBatchedStatements=true}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
 ```
 
 ---
@@ -372,7 +338,7 @@ spring:
 ☐ Java 17 instalado (java -version)
 ☐ Maven instalado (mvn -version)
 ☐ Node.js 18+ instalado (node -version)
-☐ PostgreSQL corriendo (o H2 configurado)
+☐ MySQL accesible segun `.env`
 ☐ Backend compilado (mvn compile)
 ☐ npm install ejecutado
 ☐ Backend levantado (puerto 8080)
@@ -393,8 +359,7 @@ Frontend:          http://localhost:3000
 Backend API:       http://localhost:8080/api
 Backend Swagger:   http://localhost:8080/swagger-ui.html
 WebSocket:         ws://localhost:8080/ws
-PostgreSQL:        localhost:5432
-pgAdmin (si usas): http://localhost:5050
+MySQL:             configurado en `DB_URL`
 ```
 
 ---
@@ -412,7 +377,7 @@ pgAdmin (si usas): http://localhost:5050
 "WebSocketConfig" → ✅ WebSocket habilitado
 
 # Errores comunes:
-"Caused by: org.postgresql.util.PSQLException" → BD no conecta
+"Caused by: com.mysql.cj.jdbc.exceptions" → BD no conecta
 "Port 8080 already in use" → Otro proceso usando puerto
 ```
 
@@ -492,7 +457,7 @@ Si algo no funciona, revisa:
 1. **Console (F12)** en navegador → errores de frontend
 2. **Terminal backend** → errores de compilación/ejecución
 3. **application.yml** → configuración incorrecta
-4. **PostgreSQL** → BD no accesible
+4. **MySQL** → BD no accesible
 5. **Puertos** → 3000 o 8080 en uso
 
 ---

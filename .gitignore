@@ -1,3 +1,7 @@
 Envios/
 .edge-test-profile/
 .Rproj.user
+.env
+.env.*
+!.env.example
+*.log

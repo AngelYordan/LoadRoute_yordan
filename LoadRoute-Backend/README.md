@@ -41,18 +41,18 @@ usuario: root
 password: vacio
 ```
 
-Para crear la base de datos y sus tablas:
+Para crear una configuración local no versionada:
 
 ```bash
-mysql -u root -p < src/main/resources/db/mysql/schema.sql
+cp .env.example .env
 ```
 
 Tambien puedes cambiar la conexion con variables de entorno:
 
 ```bash
-DB_URL=jdbc:mysql://localhost:3306/loadroute?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&rewriteBatchedStatements=true
-DB_USERNAME=root
-DB_PASSWORD=tu_password
+DB_URL=jdbc:mysql://host:3306/base?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&rewriteBatchedStatements=true
+DB_USERNAME=usuario
+DB_PASSWORD=password
 ```
 
 ### Comandos de Construcción

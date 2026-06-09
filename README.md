@@ -50,8 +50,9 @@ El motor de ruteo actual implementa reglas de negocio avanzadas:
 # Navegar al directorio
 cd LoadRoute-Backend
 
-# Crear la base de datos y tablas en MySQL
-mysql -u root -p < src/main/resources/db/mysql/schema.sql
+# Opcional: configura tu BD local o de pruebas
+cp .env.example .env
+# Edita .env con DB_URL, DB_USERNAME y DB_PASSWORD
 
 # Compilar el proyecto
 mvn clean install
@@ -61,8 +62,8 @@ mvn spring-boot:run
 ```
 El servidor estará disponible en `http://localhost:8080`.
 
-Por defecto el backend usa `jdbc:mysql://localhost:3306/loadroute` con usuario `root`.
-Puedes sobreescribirlo con `DB_URL`, `DB_USERNAME` y `DB_PASSWORD`.
+Por defecto el backend usa `jdbc:mysql://localhost:3306/loadroute` con usuario `root` y password vacio.
+Para pruebas o despliegue, sobreescribelo con `DB_URL`, `DB_USERNAME` y `DB_PASSWORD`.
 
 ### Paso 2: Configurar el Frontend
 ```bash
