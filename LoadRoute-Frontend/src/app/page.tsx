@@ -82,28 +82,39 @@ function formatFechaSimulacion(fechaInicioRaw: string, simDia: number): string {
   });
 }
 
-function getDiasRango(fechaInicioRaw?: string, fechaFinRaw?: string): number | null {
-  if (!fechaInicioRaw || !fechaFinRaw || fechaInicioRaw.length < 8 || fechaFinRaw.length < 8) {
-    return null;
-  }
+function parseFechaRaw(raw?: string, endOfDay = false): Date | null {
+  if (!raw || raw.length < 8) return null;
+  const y = Number(raw.slice(0, 4));
+  const m = Number(raw.slice(4, 6)) - 1;
+  const d = Number(raw.slice(6, 8));
+  const hh = raw.length >= 12 ? Number(raw.slice(8, 10)) : (endOfDay ? 23 : 0);
+  const mm = raw.length >= 12 ? Number(raw.slice(10, 12)) : (endOfDay ? 59 : 0);
+  const parsed = new Date(y, m, d, hh, mm);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
 
-  const inicio = new Date(
-    Number(fechaInicioRaw.slice(0, 4)),
-    Number(fechaInicioRaw.slice(4, 6)) - 1,
-    Number(fechaInicioRaw.slice(6, 8))
-  );
-  const fin = new Date(
-    Number(fechaFinRaw.slice(0, 4)),
-    Number(fechaFinRaw.slice(4, 6)) - 1,
-    Number(fechaFinRaw.slice(6, 8))
-  );
+function getInicioOffsetMinutos(fechaInicioRaw?: string): number {
+  if (!fechaInicioRaw || fechaInicioRaw.length < 12) return 0;
+  const h = Number(fechaInicioRaw.slice(8, 10));
+  const m = Number(fechaInicioRaw.slice(10, 12));
+  if (Number.isNaN(h) || Number.isNaN(m)) return 0;
+  return h * 60 + m;
+}
 
-  if (Number.isNaN(inicio.getTime()) || Number.isNaN(fin.getTime()) || fin < inicio) {
-    return null;
-  }
+function getFinOffsetMinutos(fechaInicioRaw?: string, fechaFinRaw?: string): number | null {
+  const inicio = parseFechaRaw(fechaInicioRaw);
+  const fin = parseFechaRaw(fechaFinRaw, true);
+  if (!inicio || !fin || fin < inicio) return null;
 
-  const MS_POR_DIA = 24 * 60 * 60 * 1000;
-  return Math.floor((fin.getTime() - inicio.getTime()) / MS_POR_DIA);
+  const inicioDia = new Date(inicio.getFullYear(), inicio.getMonth(), inicio.getDate());
+  const MS_POR_MINUTO = 60 * 1000;
+  return Math.max(0, Math.ceil((fin.getTime() - inicioDia.getTime()) / MS_POR_MINUTO));
+}
+
+function getMaxSimDia(fechaInicioRaw?: string, fechaFinRaw?: string): number | null {
+  const finOffset = getFinOffsetMinutos(fechaInicioRaw, fechaFinRaw);
+  if (finOffset === null) return null;
+  return Math.max(0, Math.floor(Math.max(0, finOffset - 1) / 1440));
 }
 
 const DURACION_ANIM_MIN = 5;
@@ -112,14 +123,16 @@ const DURACION_ANIM_STEP = 5;
 
 function calcularMaxTotalMinutos(
   resultado: RutaResponse | null,
-  maxSimDia: number | null,
+  fechaInicioRaw: string,
+  fechaFinRaw: string,
   maxTimelineMinutos: number | null,
 ): number | null {
   const diasSimulados = resultado?.cancelacionesPorDiaSA?.length ?? 0;
   if (resultado && (resultado.escenario === 2 || resultado.escenario === 3) && diasSimulados > 0) {
     return diasSimulados * 1440;
   }
-  if (maxSimDia !== null) return (maxSimDia + 1) * 1440;
+  const finOffset = getFinOffsetMinutos(fechaInicioRaw, fechaFinRaw);
+  if (finOffset !== null) return finOffset;
   return maxTimelineMinutos;
 }
 
@@ -128,6 +141,7 @@ function aplicarFechasSimulacion(
   setInicio: (v: string) => void,
   setFin: (v: string) => void,
   fechaInicioUsuario?: string,
+  fechaFinUsuario?: string,
 ) {
   if (res.escenario === 2 || res.escenario === 3) {
     setInicio(res.fechaInicio || fechaInicioUsuario || '');
@@ -135,7 +149,7 @@ function aplicarFechasSimulacion(
     return;
   }
   setInicio(fechaInicioUsuario || res.fechaInicio || '');
-  setFin(res.fechaFin || '');
+  setFin(fechaFinUsuario || res.fechaFin || '');
 }
 
 function getTimelineMaxMinutos(resultado: RutaResponse | null): number | null {
@@ -306,12 +320,14 @@ export default function Home() {
   // Simulación — un único contador de minutos totales desde el inicio del periodo
   const [simTotalMinutos,  setSimTotalMinutos]  = useState(0);
   const [isPlaying,        setIsPlaying]        = useState(false);
-  const [fechaInicioRaw,   setFechaInicioRaw]   = useState(''); // YYYYMMDD
-  const [fechaFinRaw,      setFechaFinRaw]      = useState(''); // YYYYMMDD
+  const [fechaInicioRaw,   setFechaInicioRaw]   = useState(''); // YYYYMMDD o YYYYMMDDHHmm
+  const [fechaFinRaw,      setFechaFinRaw]      = useState(''); // YYYYMMDD o YYYYMMDDHHmm
   const [duracionAnimacionMinutos, setDuracionAnimacionMinutos] = useState(60);
   const [horaReal,         setHoraReal]         = useState(() => new Date());
   const timerRef = useRef<number | null>(null);
   const lastFrameRef = useRef<number | null>(null);
+  const fechaInicioUsuarioRef = useRef('');
+  const fechaFinUsuarioRef = useRef('');
 
   // Layout
   const [activeTab,        setActiveTab]        = useState<TabId | null>(null);
@@ -320,20 +336,25 @@ export default function Home() {
   // Umbrales dinámicos de capacidad
   const [umbralVerde, setUmbralVerde] = useState(30);
   const [umbralAmbar, setUmbralAmbar] = useState(70);
-  const maxSimDia = getDiasRango(fechaInicioRaw, fechaFinRaw);
+  const simInicioMinutos = resultado?.escenario === 1 ? getInicioOffsetMinutos(fechaInicioRaw) : 0;
+  const maxSimDia = getMaxSimDia(fechaInicioRaw, fechaFinRaw);
   const maxTimelineMinutos = useMemo(() => getTimelineMaxMinutos(resultado), [resultado]);
   const diasSimulados = resultado?.cancelacionesPorDiaSA?.length ?? 0;
   const maxTotalMinutos = useMemo(
-    () => calcularMaxTotalMinutos(resultado, maxSimDia, maxTimelineMinutos),
-    [resultado, maxSimDia, maxTimelineMinutos],
+    () => calcularMaxTotalMinutos(resultado, fechaInicioRaw, fechaFinRaw, maxTimelineMinutos),
+    [resultado, fechaInicioRaw, fechaFinRaw, maxTimelineMinutos],
   );
   const avanceMinutosPorSegundo = maxTotalMinutos !== null
-    ? maxTotalMinutos / Math.max(1, duracionAnimacionMinutos * 60)
+    ? Math.max(1, maxTotalMinutos - simInicioMinutos) / Math.max(1, duracionAnimacionMinutos * 60)
     : 60;
   const rangoFinalizado   = maxTotalMinutos !== null && simTotalMinutos >= maxTotalMinutos;
   const simTotalVisual    = rangoFinalizado && maxTotalMinutos !== null
-    ? Math.max(0, maxTotalMinutos - (1 / 60))
+    ? Math.max(simInicioMinutos, maxTotalMinutos - (1 / 60))
     : simTotalMinutos;
+  const simTranscurridoMinutos = Math.max(0, simTotalVisual - simInicioMinutos);
+  const progresoSimulacion = maxTotalMinutos !== null
+    ? Math.min(Math.max(simTranscurridoMinutos / Math.max(1, maxTotalMinutos - simInicioMinutos), 0), 1)
+    : 0;
   const rutasActivas = useMemo(
     () => resultado?.resultadoSA?.rutasMuestra || [],
     [resultado?.resultadoSA?.rutasMuestra]
@@ -381,6 +402,16 @@ export default function Home() {
     if (filtrosAvionesInicializadosRef.current) return;
     filtrosAvionesInicializadosRef.current = true;
     setFiltrosAvionesMapa(FILTROS_AVIONES_INICIALES);
+  }, []);
+
+  const handleFechaInicioPanel = useCallback((fecha: string) => {
+    fechaInicioUsuarioRef.current = fecha;
+    setFechaInicioRaw(fecha);
+  }, []);
+
+  const handleFechaFinPanel = useCallback((fecha: string) => {
+    fechaFinUsuarioRef.current = fecha;
+    setFechaFinRaw(fecha);
   }, []);
 
   // Timer — avanza con requestAnimationFrame y limita commits React para mantener fluida la UI.
@@ -441,13 +472,15 @@ export default function Home() {
     setSimTotalMinutos(0);
     setFechaInicioRaw('');
     setFechaFinRaw('');
+    fechaInicioUsuarioRef.current = '';
+    fechaFinUsuarioRef.current = '';
     filtrosAvionesInicializadosRef.current = false;
     setFiltrosAvionesMapa(FILTROS_AVIONES_INICIALES);
   };
 
   const handleStop = () => {
     setIsPlaying(false);
-    setSimTotalMinutos(0);
+    setSimTotalMinutos(simInicioMinutos);
   };
 
   const handleTabClick = useCallback((id: TabId) => {
@@ -492,10 +525,10 @@ export default function Home() {
               if (res) {
                 setResultado(res);
                 inicializarFiltrosAvionesMapa();
-                setSimTotalMinutos(0);
+                setSimTotalMinutos(getInicioOffsetMinutos(fechaInicioUsuarioRef.current));
                 // fechaInicioRaw ya fue seteado por onFechaInicio antes de ejecutar
                 // res.fechaFin es el último chunk en YYYYMMDD
-                aplicarFechasSimulacion(res, setFechaInicioRaw, setFechaFinRaw, fechaInicioRaw);
+                aplicarFechasSimulacion(res, setFechaInicioRaw, setFechaFinRaw, fechaInicioUsuarioRef.current, fechaFinUsuarioRef.current);
                 setIsPlaying(true);
               }
             }}
@@ -505,17 +538,18 @@ export default function Home() {
                 if (!resultado) {
                   setResultado(res);
                   inicializarFiltrosAvionesMapa();
-                  setSimTotalMinutos(0);
-                  aplicarFechasSimulacion(res, setFechaInicioRaw, setFechaFinRaw, fechaInicioRaw);
+                  setSimTotalMinutos(getInicioOffsetMinutos(fechaInicioUsuarioRef.current));
+                  aplicarFechasSimulacion(res, setFechaInicioRaw, setFechaFinRaw, fechaInicioUsuarioRef.current, fechaFinUsuarioRef.current);
                 } else {
                   setResultado(res);
-                  aplicarFechasSimulacion(res, setFechaInicioRaw, setFechaFinRaw, fechaInicioRaw);
+                  aplicarFechasSimulacion(res, setFechaInicioRaw, setFechaFinRaw, fechaInicioUsuarioRef.current, fechaFinUsuarioRef.current);
                 }
               }
             }}
             onError={setError}
             onCargando={setCargando}
-            onFechaInicio={setFechaInicioRaw}
+            onFechaInicio={handleFechaInicioPanel}
+            onFechaFin={handleFechaFinPanel}
             onDuracionSimulacion={setDuracionAnimacionMinutos}
           />
           {error && (
@@ -574,7 +608,7 @@ export default function Home() {
           <div className="flex flex-col justify-center">
             <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider leading-none mb-0.5">Transcurrido</span>
             <span className="text-xs font-mono text-indigo-300 leading-none">
-              {formatTiempoTranscurrido(simTotalVisual)}
+              {formatTiempoTranscurrido(simTranscurridoMinutos)}
             </span>
           </div>
 
@@ -583,12 +617,12 @@ export default function Home() {
             <div className="flex flex-col justify-center w-20">
               <div className="flex justify-between text-[9px] text-slate-500 mb-1">
                 <span>Progreso</span>
-                <span>{Math.min(Math.round((simTotalVisual / maxTotalMinutos) * 100), 100)}%</span>
+                <span>{Math.round(progresoSimulacion * 100)}%</span>
               </div>
               <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-gradient-to-r from-blue-600 to-cyan-400 rounded-full transition-all duration-300"
-                  style={{ width: `${Math.min((simTotalVisual / maxTotalMinutos) * 100, 100)}%` }}
+                  style={{ width: `${progresoSimulacion * 100}%` }}
                 />
               </div>
             </div>

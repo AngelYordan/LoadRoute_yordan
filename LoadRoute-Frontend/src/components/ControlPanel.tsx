@@ -13,6 +13,7 @@ interface ControlPanelProps {
   onError: (error: string) => void;
   onCargando: (cargando: boolean) => void;
   onFechaInicio?: (fecha: string) => void;
+  onFechaFin?: (fecha: string) => void;
   onDuracionSimulacion?: (minutos: number) => void;
   onProgressJob?: (job: SimulacionJob) => void;
 }
@@ -55,6 +56,14 @@ const FILE_CONFIGS = [
   { key: 'envios',      label: 'Envíos', desc: '_envios_XXXX_.txt',          icon: <IconPackage size={18} />, accept: '.txt' },
 ];
 
+const MODOS_PERIODO = [
+  { id: 'semanal', label: 'Semanal', dias: 7 },
+  { id: 'cinco',   label: '5 días',  dias: 5 },
+  { id: 'tres',    label: '3 días',  dias: 3 },
+] as const;
+
+type ModoPeriodo = typeof MODOS_PERIODO[number]['id'];
+
 const DURACION_PERIODO_MIN  = 5;
 const DURACION_PERIODO_MAX  = 90;
 const DURACION_PERIODO_STEP = 5;
@@ -67,6 +76,10 @@ function toBackendDate(htmlDate: string): string {
   return htmlDate.replace(/-/g, '');
 }
 
+function toBackendDateTime(htmlDate: string, htmlTime: string): string {
+  return `${toBackendDate(htmlDate)}${(htmlTime || '00:00').replace(':', '')}`;
+}
+
 function todayAsHtmlDate(): string {
   const now = new Date();
   const y = now.getFullYear();
@@ -75,16 +88,34 @@ function todayAsHtmlDate(): string {
   return `${y}-${m}-${d}`;
 }
 
-function calcularDuracion(fechaInicio: string, horaInicio: string, fechaFin: string, horaFin: string) {
-  if (!fechaInicio || !fechaFin) return null;
-  const start = new Date(`${fechaInicio}T${horaInicio || '00:00'}`);
-  const end   = new Date(`${fechaFin}T${horaFin || '23:59'}`);
-  if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) return null;
-  const diffMs = end.getTime() - start.getTime();
-  const dias   = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  const horas  = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-  const mins   = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-  return { dias, horas, mins };
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function formatHtmlDate(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function formatHtmlTime(date: Date): string {
+  const h = String(date.getHours()).padStart(2, '0');
+  const m = String(date.getMinutes()).padStart(2, '0');
+  return `${h}:${m}`;
+}
+
+function calcularFinPeriodo(fechaInicio: string, horaInicio: string, dias: number): Date | null {
+  if (!fechaInicio) return null;
+  const inicio = new Date(`${fechaInicio}T${horaInicio || '00:00'}`);
+  if (Number.isNaN(inicio.getTime())) return null;
+  return addDays(inicio, dias);
+}
+
+function toBackendDateTimeFromDate(date: Date): string {
+  return `${toBackendDate(formatHtmlDate(date))}${formatHtmlTime(date).replace(':', '')}`;
 }
 
 const colorMap: Record<string, string> = {
@@ -98,7 +129,7 @@ const colorMapActive: Record<string, string> = {
   amber: 'border-amber-400 bg-amber-500/20 ring-1 ring-amber-400/30',
 };
 
-export default function ControlPanel({ onResultado, onError, onCargando, onFechaInicio, onDuracionSimulacion, onProgressJob }: ControlPanelProps) {
+export default function ControlPanel({ onResultado, onError, onCargando, onFechaInicio, onFechaFin, onDuracionSimulacion, onProgressJob }: ControlPanelProps) {
   const [archivos, setArchivos] = useState<Record<string, FileState>>({
     aeropuertos: { files: [], name: '' },
     vuelos:      { files: [], name: '' },
@@ -106,23 +137,28 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
   });
   const [escenario,              setEscenario]              = useState(1);
   const [duracionPeriodoMinutos, setDuracionPeriodoMinutos] = useState(60); // se ajusta al cambiar escenario
+  const [modoPeriodo,            setModoPeriodo]            = useState<ModoPeriodo>('semanal');
   const [fechaInicio,            setFechaInicio]            = useState('');
-  const [fechaFin,               setFechaFin]               = useState('');
   const [horaInicio,             setHoraInicio]             = useState('00:00');
-  const [horaFin,                setHoraFin]                = useState('23:59');
   const [ejecutando,             setEjecutando]             = useState(false);
   const [progreso,               setProgreso]               = useState<SimulacionJob | null>(null);
   const [cargaDatosAbierta,      setCargaDatosAbierta]      = useState(false);
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
-  const duracion = useMemo(
-    () => calcularDuracion(fechaInicio, horaInicio, fechaFin, horaFin),
-    [fechaInicio, horaInicio, fechaFin, horaFin]
+  const periodoSeleccionado = useMemo(
+    () => MODOS_PERIODO.find(modo => modo.id === modoPeriodo) || MODOS_PERIODO[0],
+    [modoPeriodo]
   );
 
-  const fechaFinMinima = fechaInicio || undefined;
+  const fechaFinCalculada = useMemo(
+    () => calcularFinPeriodo(fechaInicio, horaInicio, periodoSeleccionado.dias),
+    [fechaInicio, horaInicio, periodoSeleccionado.dias]
+  );
+  const fechaInicioBackend = fechaInicio ? toBackendDateTime(fechaInicio, horaInicio) : undefined;
+  const fechaFinBackend = fechaFinCalculada ? toBackendDateTimeFromDate(fechaFinCalculada) : undefined;
   const esSimulacionPeriodo = escenario === 1;
   const archivosCargados = Object.values(archivos).filter(state => state.files.length > 0).length;
+  const inicioPeriodoValido = !esSimulacionPeriodo || Boolean(fechaInicio);
 
   const handleFileChange = useCallback((key: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const fileList = e.target.files;
@@ -140,9 +176,12 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
 
   const handleFechaInicioChange = (val: string) => {
     setFechaInicio(val);
-    // Si fecha fin < fecha inicio, la corregimos
-    if (fechaFin && val && fechaFin < val) setFechaFin(val);
-    if (onFechaInicio) onFechaInicio(val ? toBackendDate(val) : '');
+    if (onFechaInicio) onFechaInicio(val ? toBackendDateTime(val, horaInicio) : '');
+  };
+
+  const handleHoraInicioChange = (val: string) => {
+    setHoraInicio(val);
+    if (onFechaInicio) onFechaInicio(fechaInicio ? toBackendDateTime(fechaInicio, val) : '');
   };
 
   const handleHoy = () => {
@@ -151,10 +190,16 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
   };
 
   const handleEjecutar = async () => {
+    if (!inicioPeriodoValido) {
+      onError('Selecciona la fecha y hora de inicio del periodo.');
+      return;
+    }
     setEjecutando(true);
     onCargando(true);
     onError('');
     onDuracionSimulacion?.(esSimulacionPeriodo ? duracionPeriodoMinutos : duracionAnimacionPorDefecto(escenario));
+    onFechaInicio?.(esSimulacionPeriodo ? (fechaInicioBackend || '') : '');
+    onFechaFin?.(esSimulacionPeriodo ? (fechaFinBackend || '') : '');
     setProgreso({ jobId: '', status: 'PENDING', progress: 0, message: 'Preparando simulacion...' });
     try {
       const resultado = await ejecutarSimulacion(
@@ -162,8 +207,8 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
         archivos.vuelos.files[0],
         archivos.envios.files,
         escenario,
-        esSimulacionPeriodo && fechaInicio ? toBackendDate(fechaInicio) : undefined,
-        esSimulacionPeriodo && fechaFin    ? toBackendDate(fechaFin)    : undefined,
+        esSimulacionPeriodo ? fechaInicioBackend : undefined,
+        esSimulacionPeriodo ? fechaFinBackend    : undefined,
         'sa',
         (job) => {
           setProgreso(job);
@@ -292,8 +337,27 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
         <div className="flex flex-col gap-2">
           <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
             <span>📅</span> Periodo
-            <span className="text-slate-600 font-normal normal-case tracking-normal">(opcional)</span>
           </h3>
+
+          <div className="grid grid-cols-3 gap-1.5">
+            {MODOS_PERIODO.map(modo => {
+              const isActive = modoPeriodo === modo.id;
+              return (
+                <button
+                  key={modo.id}
+                  type="button"
+                  onClick={() => setModoPeriodo(modo.id)}
+                  className={`rounded-lg border px-2 py-2 text-[10px] font-semibold transition-all
+                    ${isActive
+                      ? 'border-cyan-400 bg-cyan-500/20 text-cyan-100 ring-1 ring-cyan-400/20'
+                      : 'border-slate-700 bg-slate-800/40 text-slate-400 hover:border-cyan-500/40 hover:text-slate-200'
+                    }`}
+                >
+                  {modo.label}
+                </button>
+              );
+            })}
+          </div>
 
           {/* Fecha + Hora Inicio */}
           <div className="rounded-lg border border-slate-700/40 bg-slate-800/20 p-2 space-y-1.5">
@@ -318,46 +382,17 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
             <input
               type="time"
               value={horaInicio}
-              onChange={e => setHoraInicio(e.target.value)}
+              onChange={e => handleHoraInicioChange(e.target.value)}
               className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-200
                          focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/20
                          [color-scheme:dark] transition-all"
             />
           </div>
 
-          {/* Fecha + Hora Fin */}
-          <div className="rounded-lg border border-slate-700/40 bg-slate-800/20 p-2 space-y-1.5">
-            <label className="text-[10px] text-slate-500 uppercase tracking-wider block">Fin</label>
-            <input
-              type="date"
-              value={fechaFin}
-              min={fechaFinMinima}
-              onChange={e => setFechaFin(e.target.value)}
-              className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-200
-                         focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/20
-                         [color-scheme:dark] transition-all"
-            />
-            <input
-              type="time"
-              value={horaFin}
-              onChange={e => setHoraFin(e.target.value)}
-              className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-200
-                         focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/20
-                         [color-scheme:dark] transition-all"
-            />
-          </div>
-
-          {/* Duración calculada */}
-          {duracion ? (
-            <p className="text-[10px] text-emerald-400/80 flex items-center gap-1.5 px-1">
-              <IconClock size={14} className="shrink-0" />
-              <span>Duración: <strong>{duracion.dias}d {duracion.horas}h {duracion.mins}m</strong></span>
-            </p>
-          ) : !fechaInicio ? (
-            <p className="text-[10px] text-amber-400/80 flex items-center gap-1 px-1">
-              <IconWarning size={14} className="shrink-0" /> Sin fechas: todos los envíos
-            </p>
-          ) : null}
+          <p className={`text-[10px] flex items-center gap-1.5 px-1 ${fechaInicio ? 'text-emerald-400/80' : 'text-amber-400/80'}`}>
+            {fechaInicio ? <IconClock size={14} className="shrink-0" /> : <IconWarning size={14} className="shrink-0" />}
+            <span>{fechaInicio ? `Duración: ${periodoSeleccionado.dias} días` : 'Selecciona inicio para calcular el periodo'}</span>
+          </p>
 
           {/* Duración animación */}
           <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3 mt-1">
@@ -388,9 +423,9 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
       {/* ── 3. Botón Ejecutar ── */}
       <button
         onClick={handleEjecutar}
-        disabled={ejecutando}
+        disabled={ejecutando || !inicioPeriodoValido}
         className={`w-full py-3.5 rounded-lg font-semibold text-sm transition-all duration-300 flex items-center justify-center gap-2
-          ${!ejecutando
+          ${!ejecutando && inicioPeriodoValido
             ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20 hover:shadow-blue-500/30'
             : 'bg-slate-700/50 text-slate-500 cursor-not-allowed'
           }`}

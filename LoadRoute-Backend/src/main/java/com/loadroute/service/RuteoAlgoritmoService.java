@@ -43,6 +43,7 @@ public class RuteoAlgoritmoService {
     }
 
     private static final DateTimeFormatter FMT_FECHA = DateTimeFormatter.ofPattern("yyyyMMdd");
+    private static final DateTimeFormatter FMT_FECHA_HORA = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
     private static final int MAX_RUTAS_MUESTRA = 10_000;
     private static final int MINUTOS_LOTE_PERIODO = 5;
 
@@ -224,14 +225,29 @@ public class RuteoAlgoritmoService {
 
     private LocalDateTime parsearFechaInicio(String fecha) {
         if (fecha == null) return LocalDateTime.of(1900, 1, 1, 0, 0);
-        try { return LocalDate.parse(fecha, FMT_FECHA).atStartOfDay(); }
-        catch (DateTimeParseException e) { return LocalDateTime.of(1900, 1, 1, 0, 0); }
+        return parsearFechaParametro(fecha, false, LocalDateTime.of(1900, 1, 1, 0, 0));
     }
 
     private LocalDateTime parsearFechaFin(String fecha) {
         if (fecha == null) return LocalDateTime.of(2099, 12, 31, 23, 59, 59);
-        try { return LocalDate.parse(fecha, FMT_FECHA).atTime(23, 59, 59); }
-        catch (DateTimeParseException e) { return LocalDateTime.of(2099, 12, 31, 23, 59, 59); }
+        return parsearFechaParametro(fecha, true, LocalDateTime.of(2099, 12, 31, 23, 59, 59));
+    }
+
+    private LocalDateTime parsearFechaParametro(String fecha, boolean finDeDia, LocalDateTime fallback) {
+        if (fecha == null || fecha.isBlank()) return fallback;
+        String valor = fecha.trim();
+        try {
+            if (valor.matches("\\d{12}")) {
+                return LocalDateTime.parse(valor, FMT_FECHA_HORA);
+            }
+            if (valor.matches("\\d{8}")) {
+                LocalDate dia = LocalDate.parse(valor, FMT_FECHA);
+                return finDeDia ? dia.atTime(23, 59, 59) : dia.atStartOfDay();
+            }
+            return LocalDateTime.parse(valor);
+        } catch (DateTimeParseException e) {
+            return fallback;
+        }
     }
 
     // ── ESCENARIO 1: Simulación de Periodo (SA) ──────────────────────────────
