@@ -18,8 +18,8 @@ export async function ejecutarSimulacion(
   vuelosFile: File | undefined,
   enviosFiles: File[] | undefined,
   escenario: number,
-  fechaInicio?: string,  // formato YYYYMMDD, opcional
-  fechaFin?: string,     // formato YYYYMMDD, opcional
+  fechaInicio?: string,  // formato YYYYMMDD o YYYYMMDDHHmm, opcional
+  fechaFin?: string,     // formato YYYYMMDD o YYYYMMDDHHmm, opcional
   algoritmos: AlgoritmoSeleccion = 'ambos',
   onProgress?: (job: SimulacionJob) => void
 ): Promise<RutaResponse[]> {
