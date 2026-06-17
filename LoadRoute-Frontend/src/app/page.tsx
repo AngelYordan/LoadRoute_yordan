@@ -53,8 +53,7 @@ const NAV_TABS: { id: TabId; icon: ReactNode; label: string; color: string }[] =
 
 function getPanelWidth(tab: TabId | null): string {
   if (!tab) return '0px';
-  if (tab === 'administracion') return '600px';
-  if (tab === 'resultados') return '520px';
+  if (tab === 'administracion' || tab === 'resultados') return '520px';
   return '320px';
 }
 

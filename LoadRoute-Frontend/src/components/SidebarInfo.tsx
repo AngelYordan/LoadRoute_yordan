@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { RutaMuestra, AeropuertoDTO } from '@/types/rutas';
 import { calcularCargaAeropuertoActual, porcentajeOcupacion, formatPorcentaje } from '@/utils/capacidad';
 import { IconSearch } from '@/components/icons';
@@ -15,9 +15,6 @@ interface SidebarInfoProps {
 
 type OrdenAero = 'codigo' | 'ciudad' | 'ocupacion_desc' | 'ocupacion_asc';
 
-const PEDIDO_ROW_HEIGHT = 78;
-const PEDIDO_OVERSCAN   = 8;
-
 function SidebarInfo({
   envios,
   aeropuertos,
@@ -31,9 +28,12 @@ function SidebarInfo({
   const [searchAero,       setSearchAero]       = useState('');
   const [continenteFilter, setContinenteFilter] = useState('');
   const [ordenAero,        setOrdenAero]        = useState<OrdenAero>('codigo');
-  const pedidosScrollRef = useRef<HTMLDivElement | null>(null);
-  const [pedidosScrollTop,      setPedidosScrollTop]      = useState(0);
-  const [pedidosViewportHeight, setPedidosViewportHeight] = useState(0);
+
+  const [pedidosPage,      setPedidosPage]      = useState(1);
+  const [aeroPage,         setAeroPage]         = useState(1);
+
+  const [pedidosPageSize,  setPedidosPageSize]  = useState(10);
+  const [aeroPageSize,     setAeroPageSize]     = useState(10);
 
   // ── Continentes únicos disponibles ──
   const continentes = useMemo(
@@ -79,33 +79,46 @@ function SidebarInfo({
     });
   }, [aeropuertos, searchAero, continenteFilter, ordenAero, cargasAeropuertoOverride, envios, simTiempoMinutos]);
 
+  // Resetear páginas cuando cambian búsquedas o filtros
   useEffect(() => {
-    const el = pedidosScrollRef.current;
-    if (!el) return;
-    const updateHeight = () => setPedidosViewportHeight(el.clientHeight);
-    updateHeight();
-    const resizeObserver = new ResizeObserver(updateHeight);
-    resizeObserver.observe(el);
-    return () => resizeObserver.disconnect();
-  }, [activeTab]);
-
-  useEffect(() => {
-    setPedidosScrollTop(0);
-    if (pedidosScrollRef.current) pedidosScrollRef.current.scrollTop = 0;
+    setPedidosPage(1);
   }, [searchEnvios]);
 
-  const pedidosVirtuales = useMemo(() => {
-    const total   = filteredEnvios.length;
-    const start   = Math.max(0, Math.floor(pedidosScrollTop / PEDIDO_ROW_HEIGHT) - PEDIDO_OVERSCAN);
-    const visible = Math.ceil(Math.max(pedidosViewportHeight, PEDIDO_ROW_HEIGHT) / PEDIDO_ROW_HEIGHT);
-    const end     = Math.min(total, start + visible + PEDIDO_OVERSCAN * 2);
-    return {
-      start,
-      end,
-      totalHeight: total * PEDIDO_ROW_HEIGHT,
-      items: filteredEnvios.slice(start, end),
+  useEffect(() => {
+    setAeroPage(1);
+  }, [searchAero, continenteFilter, ordenAero]);
+
+  // Ajustar cantidad de elementos por página según la altura de la pantalla
+  useEffect(() => {
+    const handleResize = () => {
+      const height = window.innerHeight;
+      
+      // Pedidos: header 130px + paginación 45px + padding/márgenes. Fila de pedido mide 78px.
+      const pedSize = Math.max(3, Math.floor((height - 180) / 78));
+      setPedidosPageSize(pedSize);
+
+      // Aeropuertos: header 200px + paginación 45px + padding/márgenes. Fila de aeropuerto mide 92px aprox.
+      const aeroSize = Math.max(3, Math.floor((height - 260) / 92));
+      setAeroPageSize(aeroSize);
     };
-  }, [filteredEnvios, pedidosScrollTop, pedidosViewportHeight]);
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Paginación
+  const totalPedidosPages = Math.max(1, Math.ceil(filteredEnvios.length / pedidosPageSize));
+  const paginatedEnvios = useMemo(() => {
+    const start = (pedidosPage - 1) * pedidosPageSize;
+    return filteredEnvios.slice(start, start + pedidosPageSize);
+  }, [filteredEnvios, pedidosPage, pedidosPageSize]);
+
+  const totalAeroPages = Math.max(1, Math.ceil(filteredAero.length / aeroPageSize));
+  const paginatedAero = useMemo(() => {
+    const start = (aeroPage - 1) * aeroPageSize;
+    return filteredAero.slice(start, start + aeroPageSize);
+  }, [filteredAero, aeroPage, aeroPageSize]);
 
   // ── Renderiza un aeropuerto ──
   const renderAeropuerto = (a: AeropuertoDTO) => {
@@ -184,46 +197,56 @@ function SidebarInfo({
           </div>
         </div>
 
-        {/* Lista virtual */}
-        <div
-          ref={pedidosScrollRef}
-          onScroll={e => setPedidosScrollTop(e.currentTarget.scrollTop)}
-          className="flex-1 overflow-y-auto p-3 custom-scrollbar"
-        >
-          {filteredEnvios.length === 0 ? (
+        {/* Lista */}
+        <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
+          {paginatedEnvios.length === 0 ? (
             <p className="text-center text-slate-600 text-xs pt-8">Sin resultados</p>
           ) : (
-            <div className="relative" style={{ height: `${pedidosVirtuales.totalHeight}px` }}>
-              {pedidosVirtuales.items.map((e, index) => (
-                <div
-                  key={e.envioId}
-                  style={{
-                    position: 'absolute',
-                    top: `${(pedidosVirtuales.start + index) * PEDIDO_ROW_HEIGHT}px`,
-                    left: 0,
-                    right: 0,
-                    height: `${PEDIDO_ROW_HEIGHT - 8}px`,
-                  }}
-                  onClick={() => onSelectEnvio(e)}
-                  className="bg-[#122340] border border-slate-700/50 rounded-lg p-3 cursor-pointer
-                             hover:border-blue-500/50 hover:bg-[#162a4d] transition-all"
-                >
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="font-mono text-xs text-blue-400">{e.envioId}</span>
-                    <span className="bg-slate-800 text-[10px] px-2 py-0.5 rounded text-slate-400">
-                      {e.maletas} maletas
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 mt-2 text-xs font-mono text-slate-300">
-                    <span>{e.origen}</span>
-                    <span className="text-slate-500 text-[10px]">→</span>
-                    <span>{e.destino}</span>
-                  </div>
+            paginatedEnvios.map((e) => (
+              <div
+                key={e.envioId}
+                onClick={() => onSelectEnvio(e)}
+                className="bg-[#122340] border border-slate-700/50 rounded-lg p-3 cursor-pointer
+                           hover:border-blue-500/50 hover:bg-[#162a4d] transition-all"
+              >
+                <div className="flex justify-between items-center mb-1">
+                  <span className="font-mono text-xs text-blue-400">{e.envioId}</span>
+                  <span className="bg-slate-800 text-[10px] px-2 py-0.5 rounded text-slate-400">
+                    {e.maletas} maletas
+                  </span>
                 </div>
-              ))}
-            </div>
+                <div className="flex items-center gap-2 mt-2 text-xs font-mono text-slate-300">
+                  <span>{e.origen}</span>
+                  <span className="text-slate-500 text-[10px]">→</span>
+                  <span>{e.destino}</span>
+                </div>
+              </div>
+            ))
           )}
         </div>
+
+        {/* Paginación */}
+        {totalPedidosPages > 1 && (
+          <div className="flex items-center justify-between px-3 py-2 border-t border-slate-700/40 bg-[#0f1f3d]/40 shrink-0">
+            <button
+              disabled={pedidosPage === 1}
+              onClick={() => setPedidosPage(prev => Math.max(1, prev - 1))}
+              className="px-2.5 py-1 rounded bg-slate-800 border border-slate-700/60 text-[10px] font-semibold text-slate-300 hover:bg-slate-700/50 hover:text-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            >
+              Anterior
+            </button>
+            <span className="text-[10px] font-mono text-slate-400">
+              Pág. {pedidosPage} de {totalPedidosPages}
+            </span>
+            <button
+              disabled={pedidosPage === totalPedidosPages}
+              onClick={() => setPedidosPage(prev => Math.min(totalPedidosPages, prev + 1))}
+              className="px-2.5 py-1 rounded bg-slate-800 border border-slate-700/60 text-[10px] font-semibold text-slate-300 hover:bg-slate-700/50 hover:text-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            >
+              Siguiente
+            </button>
+          </div>
+        )}
       </div>
     );
   }
@@ -284,12 +307,35 @@ function SidebarInfo({
 
         {/* Lista */}
         <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
-          {filteredAero.length === 0 ? (
+          {paginatedAero.length === 0 ? (
             <p className="text-center text-slate-600 text-xs pt-8">Sin resultados</p>
           ) : (
-            filteredAero.map(renderAeropuerto)
+            paginatedAero.map(renderAeropuerto)
           )}
         </div>
+
+        {/* Paginación */}
+        {totalAeroPages > 1 && (
+          <div className="flex items-center justify-between px-3 py-2 border-t border-slate-700/40 bg-[#0f1f3d]/40 shrink-0">
+            <button
+              disabled={aeroPage === 1}
+              onClick={() => setAeroPage(prev => Math.max(1, prev - 1))}
+              className="px-2.5 py-1 rounded bg-slate-800 border border-slate-700/60 text-[10px] font-semibold text-slate-300 hover:bg-slate-700/50 hover:text-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            >
+              Anterior
+            </button>
+            <span className="text-[10px] font-mono text-slate-400">
+              Pág. {aeroPage} de {totalAeroPages}
+            </span>
+            <button
+              disabled={aeroPage === totalAeroPages}
+              onClick={() => setAeroPage(prev => Math.min(totalAeroPages, prev + 1))}
+              className="px-2.5 py-1 rounded bg-slate-800 border border-slate-700/60 text-[10px] font-semibold text-slate-300 hover:bg-slate-700/50 hover:text-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            >
+              Siguiente
+            </button>
+          </div>
+        )}
       </div>
     );
   }

@@ -51,11 +51,32 @@ export default function SidebarVuelos({
   const [selectedDia, setSelectedDia] = useState<number>(simDia);
   const [searchTerm,  setSearchTerm]  = useState('');
   const [sortKey,     setSortKey]     = useState<SortKey>('none');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize,    setPageSize]    = useState(10);
 
   // Sincronizar selectedDia con simDia cuando avanza la simulación
   useEffect(() => {
     setSelectedDia(Math.min(simDia, maxDia));
   }, [simDia, maxDia]);
+
+  // Resetear página cuando cambian los filtros
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, sortKey, selectedDia]);
+
+  // Ajustar cantidad de elementos por página según la altura de la pantalla
+  useEffect(() => {
+    const handleResize = () => {
+      const height = window.innerHeight;
+      // Header is about 180px + paginación 45px + padding/márgenes. Fila de vuelo mide 110px aprox.
+      const size = Math.max(3, Math.floor((height - 250) / 110));
+      setPageSize(size);
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const cancelacionesActivas = useMemo(
     () => new Set(cancelacionesPorDia[selectedDia] || []),
@@ -104,6 +125,12 @@ export default function SidebarVuelos({
 
     return result;
   }, [vuelos, searchTerm, sortKey, ocupacionPorVuelo]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const paginatedVuelos = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, currentPage, pageSize]);
 
   const cancelados = filtered.filter(v => cancelacionesActivas.has(v.vueloId)).length;
   const activos    = filtered.length - cancelados;
@@ -168,7 +195,7 @@ export default function SidebarVuelos({
 
       {/* ── Lista ── */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
-        {filtered.slice(0, 200).map(v => {
+        {paginatedVuelos.map(v => {
           const isCancelled = cancelacionesActivas.has(v.vueloId);
           const oc = ocupacionPorVuelo[v.vueloId];
           const pct = oc ? Math.round((oc.carga / Math.max(oc.capacidad, 1)) * 100) : 0;
@@ -237,15 +264,33 @@ export default function SidebarVuelos({
           );
         })}
 
-        {filtered.length > 200 && (
-          <p className="text-center text-[10px] text-slate-500 py-2">
-            Mostrando 200 de {filtered.length}. Usa el buscador para filtrar.
-          </p>
-        )}
         {filtered.length === 0 && (
           <p className="text-center text-xs text-slate-500 py-8">No se encontraron vuelos.</p>
         )}
       </div>
+
+      {/* Paginación */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between px-3 py-2 border-t border-slate-700/40 bg-[#0f1f3d]/40 shrink-0">
+          <button
+            disabled={currentPage === 1}
+            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+            className="px-2.5 py-1 rounded bg-slate-800 border border-slate-700/60 text-[10px] font-semibold text-slate-300 hover:bg-slate-700/50 hover:text-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+          >
+            Anterior
+          </button>
+          <span className="text-[10px] font-mono text-slate-400">
+            Pág. {currentPage} de {totalPages}
+          </span>
+          <button
+            disabled={currentPage === totalPages}
+            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+            className="px-2.5 py-1 rounded bg-slate-800 border border-slate-700/60 text-[10px] font-semibold text-slate-300 hover:bg-slate-700/50 hover:text-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+          >
+            Siguiente
+          </button>
+        </div>
+      )}
     </div>
   );
 }
