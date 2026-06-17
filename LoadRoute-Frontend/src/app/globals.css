@@ -13,7 +13,7 @@
   --accent-amber: #f59e0b;
   --accent-red: #ef4444;
   --text-primary: #f1f5f9;
-  --text-secondary: #94a3b8;
+  --text-secondary: #cbd5e1;
   --border-color: rgba(255, 255, 255, 0.08);
 }
 
@@ -95,4 +95,10 @@ body {
 }
 .pulse-glow {
   animation: pulseGlow 2s ease-in-out infinite;
+}
+
+/* Custom styles for select option dropdowns to ensure high contrast in all browsers */
+select option {
+  background-color: #0f1f3d;
+  color: #f1f5f9;
 }
