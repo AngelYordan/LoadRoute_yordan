@@ -23,7 +23,9 @@ jobs:
           distribution: 'temurin'
 
       - name: 3. Compilar el Backend (.jar)
-        run: mvn clean package -DskipTests
+        run: |
+          cd LoadRoute-Backend
+          mvn clean package -DskipTests
 
       # ==========================================
       # FASE DE COMPILACIÓN DEL FRONTEND (NEXT.JS)
@@ -44,17 +46,26 @@ jobs:
           # Comprimimos la carpeta estática 'out' generada por el build
           tar -czf out.tar.gz out/
 
+      - name: 6. Preparar archivos para envío (Staging)
+        run: |
+          # Creamos una carpeta temporal en el servidor de GitHub
+          mkdir -p deploy_staging
+          
+          # Copiamos el .jar y el comprimido a esta carpeta (quedan sueltos al mismo nivel)
+          cp LoadRoute-Backend/target/loadroute-backend-0.2.0.jar deploy_staging/
+          cp LoadRoute-Frontend/out.tar.gz deploy_staging/
+
       # ==========================================
       # FASE DE TRANSFERENCIA (SCP)
       # ==========================================
-      - name: 6. Subir archivos compilados al servidor PUCP
+      - name: 7. Subir archivos compilados al servidor PUCP
         uses: appleboy/scp-action@v0.1.4
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASSWORD }}
           # Enviamos el .jar compilado y el comprimido del frontend
-          source: "target/loadroute-backend-0.2.0.jar,LoadRoute-Frontend/out.tar.gz"
+          source: "deploy_staging/*"
           target: "~/despliegue"
           strip_components: 1
           rm: false
@@ -62,7 +73,7 @@ jobs:
       # ==========================================
       # FASE DE DESPLIEGUE Y CONFIGURACIÓN ESTRUCTURAL (SSH)
       # ==========================================
-      - name: 7. Organizar estructura unificada y reiniciar servicios en el servidor
+      - name: 8. Organizar estructura unificada y reiniciar servicios en el servidor
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.SERVER_IP }}
