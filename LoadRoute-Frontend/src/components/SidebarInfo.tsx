@@ -146,10 +146,10 @@ function SidebarInfo({
           <span className="font-bold text-slate-200">{a.codigo}</span>
           <div className="flex items-center gap-2">
             <span className={`text-xs font-bold ${colorText}`}>{formatPorcentaje(porcentaje)}%</span>
-            <span className="text-[10px] text-slate-400">{a.pais}</span>
+            <span className="text-[10px] text-slate-200">{a.pais}</span>
           </div>
         </div>
-        <p className="text-xs text-slate-400 truncate mb-1">{a.ciudad}</p>
+        <p className="text-xs text-slate-200 truncate mb-1">{a.ciudad}</p>
 
         {/* Barra de ocupación */}
         <div className="h-1.5 overflow-hidden rounded-full bg-slate-900/80 mb-1">
@@ -160,10 +160,10 @@ function SidebarInfo({
         </div>
 
         {/* Datos numéricos + continente */}
-        <div className="flex justify-between text-[10px] text-slate-500">
+        <div className="flex justify-between text-[10px] text-slate-300">
           <span>
             Actual: <span className={`font-semibold ${colorText}`}>{cargaActual}</span>
-            <span className="text-slate-600">/{a.capacidadMax}</span>
+            <span className="text-slate-400">/{a.capacidadMax}</span>
           </span>
           <span>{a.continente} | GMT{a.gmt >= 0 ? '+' : ''}{a.gmt}</span>
         </div>
@@ -211,13 +211,13 @@ function SidebarInfo({
               >
                 <div className="flex justify-between items-center mb-1">
                   <span className="font-mono text-xs text-blue-400">{e.envioId}</span>
-                  <span className="bg-slate-800 text-[10px] px-2 py-0.5 rounded text-slate-400">
+                  <span className="bg-slate-800 text-[10px] px-2 py-0.5 rounded text-slate-200">
                     {e.maletas} maletas
                   </span>
                 </div>
-                <div className="flex items-center gap-2 mt-2 text-xs font-mono text-slate-300">
+                <div className="flex items-center gap-2 mt-2 text-xs font-mono text-slate-200">
                   <span>{e.origen}</span>
-                  <span className="text-slate-500 text-[10px]">→</span>
+                  <span className="text-slate-400 text-[10px]">→</span>
                   <span>{e.destino}</span>
                 </div>
               </div>

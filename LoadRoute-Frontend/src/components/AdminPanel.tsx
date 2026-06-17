@@ -307,9 +307,9 @@ export default function AdminPanel() {
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
                           <span className="font-mono text-sm font-bold text-rose-300">{a.codigo}</span>
-                          <span className="text-xs text-slate-400 truncate">{a.ciudad}, {a.pais}</span>
+                          <span className="text-xs text-slate-200 truncate">{a.ciudad}, {a.pais}</span>
                         </div>
-                        <div className="text-[10px] text-slate-500 flex gap-3">
+                        <div className="text-[10px] text-slate-300 flex gap-3">
                           <span>GMT{a.gmt > 0 ? `+${a.gmt}` : a.gmt}</span>
                           <span>Cap: {a.capacidadMax.toLocaleString()}</span>
                         </div>
@@ -435,9 +435,9 @@ export default function AdminPanel() {
                           <span className="font-mono text-sm font-bold text-slate-200">
                             {v.origenCodigo} <span className="text-rose-400">→</span> {v.destinoCodigo}
                           </span>
-                          <span className="text-[10px] font-mono text-slate-500">#{v.id}</span>
+                          <span className="text-[10px] font-mono text-slate-400">#{v.id}</span>
                         </div>
-                        <div className="text-[10px] text-slate-500 flex gap-3">
+                        <div className="text-[10px] text-slate-300 flex gap-3">
                           <span>Sal: {v.horaSalidaLocal}</span>
                           <span>Lleg: {v.horaLlegadaLocal}</span>
                           <span>Cap: {v.capacidadMax.toLocaleString()}</span>

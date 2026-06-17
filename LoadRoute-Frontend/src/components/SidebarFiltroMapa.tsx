@@ -138,7 +138,7 @@ export default function SidebarFiltroMapa({
                 {config.titulo}
               </span>
             </label>
-            <span className="text-[10px] text-slate-400 shrink-0">
+            <span className="text-[10px] text-slate-200 shrink-0">
               {seleccionados.length}/{aeropuertos.length}
             </span>
           </div>
@@ -162,7 +162,7 @@ export default function SidebarFiltroMapa({
               type="button"
               onClick={() => seleccionarTodos(tipo)}
               disabled={!activo || aeropuertos.length === 0}
-              className="rounded-md border border-slate-700/60 bg-slate-800/70 px-2 py-1.5 text-[10px] font-semibold text-slate-300
+              className="rounded-md border border-slate-700/60 bg-slate-800/70 px-2 py-1.5 text-[10px] font-semibold text-slate-200
                          hover:bg-slate-700/70 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               Todos
@@ -171,7 +171,7 @@ export default function SidebarFiltroMapa({
               type="button"
               onClick={() => limpiarSeleccion(tipo)}
               disabled={!activo || seleccionados.length === 0}
-              className="rounded-md border border-slate-700/60 bg-slate-800/70 px-2 py-1.5 text-[10px] font-semibold text-slate-300
+              className="rounded-md border border-slate-700/60 bg-slate-800/70 px-2 py-1.5 text-[10px] font-semibold text-slate-200
                          hover:bg-slate-700/70 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               Limpiar
@@ -205,9 +205,9 @@ export default function SidebarFiltroMapa({
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center justify-between gap-2">
                       <span className="font-mono text-xs font-semibold text-slate-100">{a.codigo}</span>
-                      <span className="text-[10px] text-slate-500 truncate">{a.pais}</span>
+                      <span className="text-[10px] text-slate-300 truncate">{a.pais}</span>
                     </span>
-                    <span className="block truncate text-[11px] text-slate-400">{a.ciudad}</span>
+                    <span className="block truncate text-[11px] text-slate-200">{a.ciudad}</span>
                   </span>
                 </label>
               );
@@ -224,7 +224,7 @@ export default function SidebarFiltroMapa({
         <p className="text-xs font-semibold text-cyan-300 uppercase tracking-wider">
           Aviones en pantalla
         </p>
-        <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-slate-400">
+        <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-slate-200">
           <div className="rounded-md bg-slate-900/50 px-2 py-1.5">
             Origen <span className="font-semibold text-slate-200">{filtros.origenes.length}</span>
           </div>

@@ -235,14 +235,14 @@ export default function SidebarVuelos({
               {/* Ruta */}
               <div className="flex items-center gap-2 text-xs font-mono mb-1.5">
                 <span className={isCancelled ? 'text-red-300/70' : 'text-orange-300'}>{v.origen}</span>
-                <span className="text-slate-500">→</span>
+                <span className="text-slate-400">→</span>
                 <span className={isCancelled ? 'text-red-300/70' : 'text-orange-300'}>{v.destino}</span>
               </div>
 
               {/* Barra de ocupación */}
               {oc && !isCancelled && (
                 <div className="mb-1.5">
-                  <div className="flex justify-between text-[10px] text-slate-400 mb-1">
+                  <div className="flex justify-between text-[10px] text-slate-200 mb-1">
                     <span>{oc.carga.toLocaleString()} / {oc.capacidad.toLocaleString()} maletas</span>
                     <span className={sem!.text}>{pct}%</span>
                   </div>
@@ -256,7 +256,7 @@ export default function SidebarVuelos({
               )}
 
               {/* Horarios */}
-              <div className="flex justify-between text-[10px] text-slate-500">
+              <div className="flex justify-between text-[10px] text-slate-300">
                 <span>Sale: {v.horaSalidaLocal}</span>
                 <span>Llega: {v.horaLlegadaLocal}</span>
               </div>
