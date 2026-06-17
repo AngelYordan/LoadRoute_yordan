@@ -14,6 +14,10 @@ const config: Config = {
         success: '#10B981',
         warning: '#F59E0B',
         danger: '#EF4444',
+        slate: {
+          400: '#cbd5e1',
+          500: '#cbd5e1',
+        },
       },
     },
   },
