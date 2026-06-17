@@ -42,11 +42,11 @@ const FILTROS_AVIONES_INICIALES: FiltrosAvionesMapa = {
 };
 
 const NAV_TABS: { id: TabId; icon: ReactNode; label: string; color: string }[] = [
-  { id: 'pedidos',        icon: <IconPackage size={20} />,    label: 'Pedidos',     color: 'blue'    },
   { id: 'aeropuertos',    icon: <IconBuilding size={20} />,   label: 'Aeropuertos', color: 'emerald' },
+  { id: 'vuelos',         icon: <IconPlane size={20} />,      label: 'Vuelos',      color: 'orange'  },
+  { id: 'pedidos',        icon: <IconPackage size={20} />,    label: 'Pedidos',     color: 'blue'    },
   { id: 'simulacion',     icon: <IconSettings size={20} />,   label: 'Simulación',  color: 'violet'  },
   { id: 'pantalla',       icon: <IconScreen size={20} />,     label: 'Pantalla',    color: 'cyan'    },
-  { id: 'vuelos',         icon: <IconPlane size={20} />,      label: 'Vuelos',      color: 'orange'  },
   { id: 'resultados',     icon: <IconChart size={20} />,      label: 'Resultados',  color: 'indigo'  },
   { id: 'administracion', icon: <IconClipboard size={20} />,  label: 'Maestros',    color: 'rose'    },
 ];
@@ -67,6 +67,22 @@ function formatTiempoTranscurrido(minutos: number): string {
   if (dias > 0)  return `${dias}d ${horas}h ${mins}m`;
   if (horas > 0) return `${horas}h ${mins}m`;
   return `${mins}m`;
+}
+
+// ── Helper: tiempo real transcurrido legible ──
+function formatTiempoReal(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const tenths = Math.floor((ms % 1000) / 100);
+
+  const pad = (n: number) => n.toString().padStart(2, '0');
+
+  if (hours > 0) {
+    return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}.${tenths}`;
+  }
+  return `${pad(minutes)}:${pad(seconds)}.${tenths}`;
 }
 
 // ── Helper: fecha de simulación ──
@@ -319,6 +335,7 @@ export default function Home() {
 
   // Simulación — un único contador de minutos totales desde el inicio del periodo
   const [simTotalMinutos,  setSimTotalMinutos]  = useState(0);
+  const [realElapsedMs,    setRealElapsedMs]    = useState(0);
   const [isPlaying,        setIsPlaying]        = useState(false);
   const [fechaInicioRaw,   setFechaInicioRaw]   = useState(''); // YYYYMMDD o YYYYMMDDHHmm
   const [fechaFinRaw,      setFechaFinRaw]      = useState(''); // YYYYMMDD o YYYYMMDDHHmm
@@ -452,6 +469,8 @@ export default function Home() {
         return next;
       });
 
+      setRealElapsedMs(prev => prev + deltaMs);
+
       if (continuar) {
         timerRef.current = requestAnimationFrame(step);
       }
@@ -470,6 +489,7 @@ export default function Home() {
     setResultado(null);
     setIsPlaying(false);
     setSimTotalMinutos(0);
+    setRealElapsedMs(0);
     setFechaInicioRaw('');
     setFechaFinRaw('');
     fechaInicioUsuarioRef.current = '';
@@ -481,6 +501,7 @@ export default function Home() {
   const handleStop = () => {
     setIsPlaying(false);
     setSimTotalMinutos(simInicioMinutos);
+    setRealElapsedMs(0);
   };
 
   const handleTabClick = useCallback((id: TabId) => {
@@ -526,6 +547,7 @@ export default function Home() {
                 setResultado(res);
                 inicializarFiltrosAvionesMapa();
                 setSimTotalMinutos(getInicioOffsetMinutos(fechaInicioUsuarioRef.current));
+                setRealElapsedMs(0);
                 // fechaInicioRaw ya fue seteado por onFechaInicio antes de ejecutar
                 // res.fechaFin es el último chunk en YYYYMMDD
                 aplicarFechasSimulacion(res, setFechaInicioRaw, setFechaFinRaw, fechaInicioUsuarioRef.current, fechaFinUsuarioRef.current);
@@ -539,6 +561,7 @@ export default function Home() {
                   setResultado(res);
                   inicializarFiltrosAvionesMapa();
                   setSimTotalMinutos(getInicioOffsetMinutos(fechaInicioUsuarioRef.current));
+                  setRealElapsedMs(0);
                   aplicarFechasSimulacion(res, setFechaInicioRaw, setFechaFinRaw, fechaInicioUsuarioRef.current, fechaFinUsuarioRef.current);
                 } else {
                   setResultado(res);
@@ -592,30 +615,40 @@ export default function Home() {
         {/* Fecha simulada + GMT + Transcurrido + Progreso */}
         <div className="flex items-center gap-4 flex-1">
           <div className="flex flex-col justify-center">
-            <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider leading-none mb-0.5">Simulación</span>
-            <span className="text-xs font-medium text-slate-300 capitalize leading-none">
+            <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider leading-none mb-1">Simulación</span>
+            <span className="text-xs font-semibold text-slate-100 capitalize leading-none">
               {formatFechaSimulacion(fechaInicioRaw, simDia)}
             </span>
           </div>
           <div className="flex flex-col justify-center">
-            <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider leading-none mb-0.5">Hora GMT</span>
-            <span className="text-lg font-mono text-emerald-400 font-bold leading-none tracking-wider">
+            <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider leading-none mb-1">Hora GMT</span>
+            <span className="text-lg font-mono text-emerald-300 font-bold leading-none tracking-wider">
               {formatoHora(simHoraMinutos)}
             </span>
           </div>
 
           {/* Tiempo transcurrido */}
           <div className="flex flex-col justify-center">
-            <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider leading-none mb-0.5">Transcurrido</span>
-            <span className="text-xs font-mono text-indigo-300 leading-none">
+            <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider leading-none mb-1">Transcurrido</span>
+            <span className="text-xs font-mono text-indigo-200 font-semibold leading-none">
               {formatTiempoTranscurrido(simTranscurridoMinutos)}
             </span>
           </div>
 
+          {/* Tiempo Real Transcurrido */}
+          {resultado?.escenario === 1 && (
+            <div className="flex flex-col justify-center">
+              <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider leading-none mb-1">Tiempo Real</span>
+              <span className="text-xs font-mono text-cyan-300 font-bold leading-none">
+                {formatTiempoReal(realElapsedMs)}
+              </span>
+            </div>
+          )}
+
           {/* Barra de progreso */}
           {maxTotalMinutos !== null && maxTotalMinutos > 0 && (
             <div className="flex flex-col justify-center w-20">
-              <div className="flex justify-between text-[9px] text-slate-500 mb-1">
+              <div className="flex justify-between text-[10px] font-bold text-slate-300 mb-1">
                 <span>Progreso</span>
                 <span>{Math.round(progresoSimulacion * 100)}%</span>
               </div>
@@ -668,8 +701,8 @@ export default function Home() {
 
         {/* Hora Real */}
         <div className="flex flex-col items-end justify-center shrink-0">
-          <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider leading-none mb-0.5">Hora actual</span>
-          <span className="text-sm font-mono text-slate-300 leading-none">
+          <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider leading-none mb-1">Hora actual</span>
+          <span className="text-sm font-mono text-slate-100 font-semibold leading-none">
             {horaReal.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
           </span>
         </div>
@@ -708,7 +741,7 @@ export default function Home() {
                   className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200
                     ${isActive
                       ? `${activeColors[tab.color]} shadow-lg ring-1 ring-current/20`
-                      : 'text-slate-500 hover:text-slate-200 hover:bg-slate-700/60'}`}
+                      : 'text-slate-300 hover:text-slate-100 hover:bg-slate-700/60'}`}
                   aria-label={tab.label}
                 >
                   {tab.icon}
