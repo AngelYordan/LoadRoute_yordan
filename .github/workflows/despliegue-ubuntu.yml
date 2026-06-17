@@ -43,7 +43,7 @@ jobs:
           npm install
           # Creamos el .env temporal en GitHub Actions para "quemar" la URL del proxy inverso (Nginx)
           # Como acordamos, ya no lleva el puerto 8081 porque Nginx escucha en el puerto 80 por defecto
-          echo "NEXT_PUBLIC_BACKEND_URL=http://200.16.7.143" > .env
+          echo "NEXT_PUBLIC_BACKEND_URL=http://${{ secrets.SERVER_IP }}" > .env
           npm run build
           # Comprimimos la carpeta estática 'out' generada por el build
           tar -czf out.tar.gz out/
