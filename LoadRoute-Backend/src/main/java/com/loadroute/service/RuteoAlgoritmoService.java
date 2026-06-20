@@ -45,9 +45,13 @@ public class RuteoAlgoritmoService {
 
         String getMensajeColapso();
 
-        default int getSa() { return 1; }
+        default int getSa() {
+            return 1;
+        }
 
-        default int getK() { return 240; }
+        default int getK() {
+            return 240;
+        }
     }
 
     @FunctionalInterface
@@ -70,24 +74,25 @@ public class RuteoAlgoritmoService {
             this.k = k;
         }
 
-        public int getSa() { return sa; }
-        public int getK() { return k; }
-        public int getScMinutos() { return sa * k; }
+        public int getSa() {
+            return sa;
+        }
+
+        public int getK() {
+            return k;
+        }
+
+        public int getScMinutos() {
+            return sa * k;
+        }
     }
 
     public static ParametrosSimulacion obtenerParametrosSimulacion(LocalDateTime inicio, LocalDateTime fin) {
         if (inicio == null || fin == null) {
             return new ParametrosSimulacion(3, 240);
         }
-        long dias = ChronoUnit.DAYS.between(inicio.toLocalDate(), fin.toLocalDate());
         int sa = 1;
-        int k;
-        if (dias <= 3)
-            k = 144;
-        else if (dias <= 5)
-            k = 200;
-        else
-            k = 240;
+        int k = 200;
         return new ParametrosSimulacion(sa, k);
     }
 
