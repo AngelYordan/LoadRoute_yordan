@@ -43,17 +43,14 @@ public class SolucionEstado {
      * Si un envio no cabe en origen o conexiones durante sus intervalos de espera,
      * se remueve su ruta y queda registrado como no aceptado.
      */
-    public int aplicarRestriccionCapacidadAeropuertos() {
-        return aplicarRestriccionCapacidadAeropuertos(new HashMap<>());
-    }
-
-    public int aplicarRestriccionCapacidadAeropuertos(Map<String, List<OccupancyEvent>> reservasPorAero) {
-        idsNoAceptados.clear();
+    public List<String> verificarCapacidadAeropuertos(Map<String, List<OccupancyEvent>> reservasPorAero) {
+        List<String> idsColapsados = new ArrayList<>();
         Map<String, List<OccupancyEvent>> eventosPorAero = reservasPorAero != null ? reservasPorAero : new HashMap<>();
         List<String> idsConRuta = new ArrayList<>();
 
         for (Map.Entry<String, List<Vuelo>> entry : asignaciones.entrySet()) {
             if (!entry.getValue().isEmpty()) idsConRuta.add(entry.getKey());
+            else idsColapsados.add(entry.getKey()); // If no route found by SA, it's also a collapse
         }
 
         idsConRuta.sort(Comparator
@@ -75,9 +72,8 @@ public class SolucionEstado {
             }
 
             if (!cabe) {
-                removerRuta(id);
-                idsNoAceptados.add(id);
-                continue;
+                idsColapsados.add(id);
+                // No removemos la ruta, dejamos que colapse físicamente para que el usuario lo vea
             }
 
             for (AirportInterval intervalo : intervalos) {
@@ -87,7 +83,7 @@ public class SolucionEstado {
             }
         }
 
-        return idsNoAceptados.size();
+        return idsColapsados;
     }
 
     // ── Función objetivo ─────────────────────────────────────────────────────

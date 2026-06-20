@@ -38,14 +38,16 @@ public class RedLogistica {
         }
     }
 
-    public List<List<Vuelo>> buscarRutas(Envio envio, boolean soloConCapacidad) {
-        return buscarRutas(envio, soloConCapacidad, Collections.emptySet());
+    public List<List<Vuelo>> buscarRutas(Envio envio, boolean soloConCapacidad, LocalDateTime minSalidaGMT) {
+        return buscarRutas(envio, soloConCapacidad, Collections.emptySet(), minSalidaGMT);
     }
 
-    public List<List<Vuelo>> buscarRutas(Envio envio, boolean soloConCapacidad, Set<Integer> vuelosCancelados) {
+    public List<List<Vuelo>> buscarRutas(Envio envio, boolean soloConCapacidad, Set<Integer> vuelosCancelados, LocalDateTime minSalidaGMT) {
         String          codigoOrigen  = envio.getOrigen().getCodigo();
         String          codigoDestino = envio.getDestino().getCodigo();
-        LocalDateTime   disponibleGMT = envio.getRecepcionGMT();
+        LocalDateTime   disponibleGMT = minSalidaGMT != null && minSalidaGMT.isAfter(envio.getRecepcionGMT()) 
+                                            ? minSalidaGMT 
+                                            : envio.getRecepcionGMT();
         LocalDateTime   deadlineGMT   = envio.getDeadlineGMT();
         int             maletas       = envio.getCantidadMaletas();
 
@@ -86,12 +88,12 @@ public class RedLogistica {
         return rutasEncontradas;
     }
 
-    public List<List<Vuelo>> buscarRutasRelajadas(Envio envio) {
-        return buscarRutas(envio, false, Collections.emptySet());
+    public List<List<Vuelo>> buscarRutasRelajadas(Envio envio, LocalDateTime minSalidaGMT) {
+        return buscarRutas(envio, false, Collections.emptySet(), minSalidaGMT);
     }
 
-    public List<List<Vuelo>> buscarRutasRelajadas(Envio envio, Set<Integer> vuelosCancelados) {
-        return buscarRutas(envio, false, vuelosCancelados);
+    public List<List<Vuelo>> buscarRutasRelajadas(Envio envio, Set<Integer> vuelosCancelados, LocalDateTime minSalidaGMT) {
+        return buscarRutas(envio, false, vuelosCancelados, minSalidaGMT);
     }
 
     // ── Utilidades ────────────────────────────────────────────────────────────

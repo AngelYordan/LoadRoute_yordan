@@ -31,6 +31,8 @@ public class RuteoAsyncJobService {
     private final RuteoAlgoritmoService ruteoService;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final ScheduledExecutorService cleanupExecutor = Executors.newSingleThreadScheduledExecutor();
+    private final ScheduledExecutorService simExecutor = Executors.newScheduledThreadPool(10);
+    private final Map<String, java.util.concurrent.ScheduledFuture<?>> simTasks = new ConcurrentHashMap<>();
     private final Map<String, SimulacionJobDTO> jobs = new ConcurrentHashMap<>();
     private final Map<String, Long> finishedAt = new ConcurrentHashMap<>();
     private final SimpMessagingTemplate messagingTemplate;
@@ -51,47 +53,72 @@ public class RuteoAsyncJobService {
         jobs.put(jobId, job);
 
         executor.submit(() -> {
-            update(jobId, "RUNNING", 5, "Cargando datos e iniciando simulacion...");
+            update(jobId, "RUNNING", 5, "Cargando datos e preparando simulacion periodica...");
             try {
-                List<RutaResponseDTO> returnedChunks = ruteoService.ejecutarRuteo(
-                        null,
-                        null,
-                        null,
-                        escenario,
-                        fechaInicio,
-                        fechaFin,
-                        new RuteoAlgoritmoService.ProgressReporter() {
-                            @Override
-                            public void update(int progress, String message) {
-                                RuteoAsyncJobService.this.update(jobId, "RUNNING", progress, message);
-                            }
-                            @Override
-                            public void onChunk(RutaResponseDTO chunk) {
-                                SimulacionJobDTO current = jobs.get(jobId);
-                                if (current != null) {
-                                    current.addChunk(chunk);
-                                }
-                            }
-                        }
+                RuteoAlgoritmoService.SimulacionIterator iterator = ruteoService.prepararIteradorRuteo(
+                        null, null, null, escenario, fechaInicio, fechaFin,
+                        (progress, message) -> RuteoAsyncJobService.this.update(jobId, "RUNNING", progress, message)
                 );
-                SimulacionJobDTO current = jobs.get(jobId);
-                if (current != null && current.getChunks().isEmpty() && returnedChunks != null) {
-                    for (RutaResponseDTO chunk : returnedChunks) current.addChunk(chunk);
-                }
-                current = jobs.get(jobId);
-                if (current != null) {
-                    current.setStatus("DONE");
-                    current.setProgress(100);
-                    current.setMessage("Simulacion completada.");
-                    finishedAt.put(jobId, System.currentTimeMillis());
-                    messagingTemplate.convertAndSend("/topic/simulacion", "{\"event\": \"SIMULACION_FINALIZADA\", \"jobId\": \"" + jobId + "\"}");
-                }
+
+                int saPeriod = iterator.getSa();
+                
+                update(jobId, "RUNNING", 35, "Ejecutando primer salto (Sc)...");
+                
+                java.util.concurrent.ScheduledFuture<?> task = simExecutor.scheduleAtFixedRate(() -> {
+                    try {
+                        if (!iterator.hasNext()) {
+                            SimulacionJobDTO current = jobs.get(jobId);
+                            if (current != null) {
+                                current.setStatus("DONE");
+                                current.setProgress(100);
+                                current.setMessage("Simulacion completada.");
+                                finishedAt.put(jobId, System.currentTimeMillis());
+                                messagingTemplate.convertAndSend("/topic/simulacion", "{\"event\": \"SIMULACION_FINALIZADA\", \"jobId\": \"" + jobId + "\"}");
+                            }
+                            cancelarTarea(jobId);
+                            return;
+                        }
+
+                        RutaResponseDTO chunk = iterator.nextChunk();
+                        if (chunk != null) {
+                            SimulacionJobDTO current = jobs.get(jobId);
+                            if (current != null) current.addChunk(chunk);
+                        }
+
+                        if (iterator.hasColapsado()) {
+                            SimulacionJobDTO current = jobs.get(jobId);
+                            if (current != null) {
+                                current.setStatus("ERROR");
+                                current.setProgress(100);
+                                current.setMessage(iterator.getMensajeColapso());
+                                current.setError(iterator.getMensajeColapso());
+                                finishedAt.put(jobId, System.currentTimeMillis());
+                                messagingTemplate.convertAndSend("/topic/simulacion", "{\"event\": \"SIMULACION_ERROR\", \"jobId\": \"" + jobId + "\"}");
+                            }
+                            cancelarTarea(jobId);
+                        }
+
+                    } catch (Exception ex) {
+                        SimulacionJobDTO current = jobs.get(jobId);
+                        if (current != null) {
+                            current.setStatus("ERROR");
+                            current.setProgress(100);
+                            current.setMessage("Fallo iteracion.");
+                            current.setError(ex.getMessage());
+                            finishedAt.put(jobId, System.currentTimeMillis());
+                        }
+                        cancelarTarea(jobId);
+                    }
+                }, 0, saPeriod, TimeUnit.MINUTES);
+                
+                simTasks.put(jobId, task);
+
             } catch (Exception e) {
                 SimulacionJobDTO current = jobs.get(jobId);
                 if (current != null) {
                     current.setStatus("ERROR");
                     current.setProgress(100);
-                    current.setMessage("La simulacion fallo.");
+                    current.setMessage("La simulacion fallo al iniciar.");
                     current.setError(e.getMessage());
                     finishedAt.put(jobId, System.currentTimeMillis());
                     messagingTemplate.convertAndSend("/topic/simulacion", "{\"event\": \"SIMULACION_ERROR\", \"jobId\": \"" + jobId + "\"}");
@@ -116,7 +143,15 @@ public class RuteoAsyncJobService {
 
     public boolean eliminar(String jobId) {
         finishedAt.remove(jobId);
+        cancelarTarea(jobId);
         return jobs.remove(jobId) != null;
+    }
+
+    private void cancelarTarea(String jobId) {
+        java.util.concurrent.ScheduledFuture<?> task = simTasks.remove(jobId);
+        if (task != null) {
+            task.cancel(true);
+        }
     }
 
     private void update(String jobId, String status, int progress, String message) {
@@ -139,6 +174,7 @@ public class RuteoAsyncJobService {
             long ttl = "ERROR".equals(job.getStatus()) ? ERROR_JOB_TTL_MS : COMPLETED_JOB_TTL_MS;
             if (now - entry.getValue() > ttl) {
                 jobs.remove(entry.getKey());
+                cancelarTarea(entry.getKey());
                 finishedAt.remove(entry.getKey());
             }
         }
@@ -148,6 +184,7 @@ public class RuteoAsyncJobService {
     public void shutdown() {
         executor.shutdownNow();
         cleanupExecutor.shutdownNow();
+        simExecutor.shutdownNow();
     }
 
     private Path persistMultipart(Path dir, MultipartFile file, String fallbackName) throws IOException {

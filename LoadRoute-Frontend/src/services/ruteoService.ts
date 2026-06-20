@@ -105,20 +105,43 @@ async function esperarResultadoSimulacion(
   jobId: string,
   onProgress?: (job: SimulacionJob) => void
 ): Promise<RutaResponse[]> {
+  let chunksCargados = 0;
+  const todosLosChunks: RutaResponse[] = [];
+
   while (true) {
     await new Promise(resolve => setTimeout(resolve, 1000));
-    const job = await obtenerEstadoSimulacion(jobId);
-    onProgress?.(job);
+    const jobStatus = await obtenerEstadoSimulacion(jobId);
 
-    if (job.status === 'DONE') {
-      const result = await obtenerChunksSimulacion(jobId, 0);
-      await eliminarSimulacion(jobId);
-      return result.chunks || [];
+    // Fetch missing chunks if the backend reports there are new ones
+    if (jobStatus.chunkCount && jobStatus.chunkCount > chunksCargados) {
+      try {
+        const jobWithChunks = await obtenerChunksSimulacion(jobId, chunksCargados);
+        if (jobWithChunks.chunks && jobWithChunks.chunks.length > 0) {
+          todosLosChunks.push(...jobWithChunks.chunks);
+          chunksCargados += jobWithChunks.chunks.length;
+        }
+      } catch (err) {
+        console.warn("No se pudieron cargar nuevos chunks progresivos", err);
+      }
     }
 
-    if (job.status === 'ERROR') {
+    // Pass the accumulated chunks back to the progress handler so the map can render them
+    const currentJob: SimulacionJob = {
+      ...jobStatus,
+      chunks: todosLosChunks,
+      chunkCount: chunksCargados
+    };
+    
+    onProgress?.(currentJob);
+
+    if (jobStatus.status === 'DONE') {
       await eliminarSimulacion(jobId);
-      throw new Error(job.error || job.message || 'La simulacion fallo');
+      return todosLosChunks;
+    }
+
+    if (jobStatus.status === 'ERROR') {
+      await eliminarSimulacion(jobId);
+      throw new Error(jobStatus.error || jobStatus.message || 'La simulacion fallo');
     }
   }
 }
