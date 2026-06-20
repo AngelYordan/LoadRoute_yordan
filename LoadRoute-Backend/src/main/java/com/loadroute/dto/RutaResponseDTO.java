@@ -42,6 +42,12 @@ public class RutaResponseDTO {
     @JsonProperty("loteFin")
     private String loteFin;
 
+    @JsonProperty("sa")
+    private int sa;
+
+    @JsonProperty("k")
+    private int k;
+
     // ── Constructors ──────────────────────────────────────────────────────
 
     public RutaResponseDTO() {}
@@ -80,6 +86,12 @@ public class RutaResponseDTO {
 
     public String getLoteFin() { return loteFin; }
     public void setLoteFin(String loteFin) { this.loteFin = loteFin; }
+
+    public int getSa() { return sa; }
+    public void setSa(int sa) { this.sa = sa; }
+
+    public int getK() { return k; }
+    public void setK(int k) { this.k = k; }
 
     // ── DTOs internos ─────────────────────────────────────────────────────
 

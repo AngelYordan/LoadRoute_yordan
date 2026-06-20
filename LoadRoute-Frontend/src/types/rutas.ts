@@ -68,6 +68,8 @@ export interface RutaResponse {
   fechaFin?: string;
   loteInicio?: string;
   loteFin?: string;
+  sa?: number;
+  k?: number;
   
   // Custom frontend arrays mapped from chunks
   cancelacionesPorDiaSA?: number[][];

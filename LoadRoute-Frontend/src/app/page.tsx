@@ -99,11 +99,13 @@ function formatFechaSimulacion(fechaInicioRaw: string, simDia: number): string {
 
 function parseFechaRaw(raw?: string, endOfDay = false): Date | null {
   if (!raw || raw.length < 8) return null;
-  const y = Number(raw.slice(0, 4));
-  const m = Number(raw.slice(4, 6)) - 1;
-  const d = Number(raw.slice(6, 8));
-  const hh = raw.length >= 12 ? Number(raw.slice(8, 10)) : (endOfDay ? 23 : 0);
-  const mm = raw.length >= 12 ? Number(raw.slice(10, 12)) : (endOfDay ? 59 : 0);
+  const cleanRaw = raw.replace(/[- :T]/g, '');
+  if (cleanRaw.length < 8) return null;
+  const y = Number(cleanRaw.slice(0, 4));
+  const m = Number(cleanRaw.slice(4, 6)) - 1;
+  const d = Number(cleanRaw.slice(6, 8));
+  const hh = cleanRaw.length >= 12 ? Number(cleanRaw.slice(8, 10)) : (endOfDay ? 23 : 0);
+  const mm = cleanRaw.length >= 12 ? Number(cleanRaw.slice(10, 12)) : (endOfDay ? 59 : 0);
   const parsed = new Date(y, m, d, hh, mm);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
@@ -146,6 +148,12 @@ function calcularMaxTotalMinutos(
   if (resultado && (resultado.escenario === 2 || resultado.escenario === 3) && diasSimulados > 0) {
     return diasSimulados * 1440;
   }
+  
+  if (resultado && resultado.escenario === 1 && resultado.loteFin) {
+    const finLoteOffset = getFinOffsetMinutos(fechaInicioRaw, resultado.loteFin);
+    if (finLoteOffset !== null) return finLoteOffset;
+  }
+
   const finOffset = getFinOffsetMinutos(fechaInicioRaw, fechaFinRaw);
   if (finOffset !== null) return finOffset;
   return maxTimelineMinutos;
@@ -230,15 +238,13 @@ function combineChunks(chunks: RutaResponse[] | undefined): RutaResponse | null 
 // ── Panel ⚙️ Simulación — solo umbrales y reinicio ──────────────────────────
 function SimulacionPanel({
   umbralVerde, umbralAmbar, onUmbralVerde, onUmbralAmbar, onReiniciar,
-  duracionAnimacionMinutos, onDuracionAnimacion, escenario, diasSimulados,
+  escenario, diasSimulados,
 }: {
   umbralVerde: number;
   umbralAmbar: number;
   onUmbralVerde: (v: number) => void;
   onUmbralAmbar: (v: number) => void;
   onReiniciar: () => void;
-  duracionAnimacionMinutos: number;
-  onDuracionAnimacion: (v: number) => void;
   escenario: number;
   diasSimulados: number;
 }) {
@@ -277,34 +283,6 @@ function SimulacionPanel({
         </div>
       </div>
 
-      <div className="bg-slate-900/40 border border-slate-700/50 rounded-xl p-4 backdrop-blur-sm">
-        <p className="text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-3">Velocidad de Animación</p>
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-[10px] text-slate-200">Tiempo real para completar</span>
-          <span className="text-xs font-bold text-violet-300 bg-violet-500/15 border border-violet-400/30 px-2 py-0.5 rounded">
-            {duracionAnimacionMinutos} min
-          </span>
-        </div>
-        <input
-          type="range"
-          min={DURACION_ANIM_MIN}
-          max={DURACION_ANIM_MAX}
-          step={DURACION_ANIM_STEP}
-          value={duracionAnimacionMinutos}
-          onChange={e => onDuracionAnimacion(Number(e.target.value))}
-          className="w-full h-1 cursor-pointer accent-violet-400"
-        />
-        <div className="flex justify-between text-[9px] text-slate-300 mt-1">
-          <span>{DURACION_ANIM_MIN}m (rápido)</span>
-          <span>{DURACION_ANIM_MAX}m</span>
-        </div>
-        {escenario !== 1 && diasSimulados > 0 && (
-          <p className="text-[9px] text-slate-300 mt-2">
-            {diasSimulados} días simulados · ~{((duracionAnimacionMinutos * 60) / diasSimulados).toFixed(1)}s reales por día
-          </p>
-        )}
-      </div>
-
       <div className="border-t border-slate-700/50" />
 
       <button
@@ -338,12 +316,12 @@ export default function Home() {
   const [isPlaying,        setIsPlaying]        = useState(false);
   const [fechaInicioRaw,   setFechaInicioRaw]   = useState(''); // YYYYMMDD o YYYYMMDDHHmm
   const [fechaFinRaw,      setFechaFinRaw]      = useState(''); // YYYYMMDD o YYYYMMDDHHmm
-  const [duracionAnimacionMinutos, setDuracionAnimacionMinutos] = useState(60);
   const [horaReal,         setHoraReal]         = useState(() => new Date());
   const timerRef = useRef<number | null>(null);
   const lastFrameRef = useRef<number | null>(null);
   const fechaInicioUsuarioRef = useRef('');
   const fechaFinUsuarioRef = useRef('');
+  const isFirstChunkRef = useRef(true);
 
   // Layout
   const [activeTab,        setActiveTab]        = useState<TabId | null>(null);
@@ -360,9 +338,9 @@ export default function Home() {
     () => calcularMaxTotalMinutos(resultado, fechaInicioRaw, fechaFinRaw, maxTimelineMinutos),
     [resultado, fechaInicioRaw, fechaFinRaw, maxTimelineMinutos],
   );
-  const avanceMinutosPorSegundo = maxTotalMinutos !== null
-    ? Math.max(1, maxTotalMinutos - simInicioMinutos) / Math.max(1, duracionAnimacionMinutos * 60)
-    : 60;
+  const kRate = resultado?.k ?? 240;
+  const saRate = resultado?.sa ?? 1;
+  const avanceMinutosPorSegundo = (kRate * saRate) / 60;
   const rangoFinalizado   = maxTotalMinutos !== null && simTotalMinutos >= maxTotalMinutos;
   const simTotalVisual    = rangoFinalizado && maxTotalMinutos !== null
     ? Math.max(simInicioMinutos, maxTotalMinutos - (1 / 60))
@@ -493,6 +471,7 @@ export default function Home() {
     setFechaFinRaw('');
     fechaInicioUsuarioRef.current = '';
     fechaFinUsuarioRef.current = '';
+    isFirstChunkRef.current = true;
     filtrosAvionesInicializadosRef.current = false;
     setFiltrosAvionesMapa(FILTROS_AVIONES_INICIALES);
   };
@@ -544,6 +523,7 @@ export default function Home() {
               const res = combineChunks(resChunks);
               if (res) {
                 setResultado(res);
+                isFirstChunkRef.current = false;
                 inicializarFiltrosAvionesMapa();
                 setSimTotalMinutos(getInicioOffsetMinutos(fechaInicioUsuarioRef.current));
                 setRealElapsedMs(0);
@@ -556,7 +536,8 @@ export default function Home() {
             onProgressJob={(job) => {
               const res = combineChunks(job.chunks);
               if (res) {
-                if (!resultado) {
+                if (isFirstChunkRef.current) {
+                  isFirstChunkRef.current = false;
                   setResultado(res);
                   inicializarFiltrosAvionesMapa();
                   setSimTotalMinutos(getInicioOffsetMinutos(fechaInicioUsuarioRef.current));
@@ -566,13 +547,13 @@ export default function Home() {
                   setResultado(res);
                   aplicarFechasSimulacion(res, setFechaInicioRaw, setFechaFinRaw, fechaInicioUsuarioRef.current, fechaFinUsuarioRef.current);
                 }
+                setIsPlaying(true);
               }
             }}
             onError={setError}
             onCargando={setCargando}
             onFechaInicio={handleFechaInicioPanel}
             onFechaFin={handleFechaFinPanel}
-            onDuracionSimulacion={setDuracionAnimacionMinutos}
           />
           {error && (
             <div className="p-3 mt-4 bg-red-900/20 border border-red-500/30 rounded-lg text-red-300 text-xs fade-in-up text-center">
@@ -614,13 +595,13 @@ export default function Home() {
         {/* Fecha simulada + GMT + Transcurrido + Progreso */}
         <div className="flex items-center gap-4 flex-1">
           <div className="flex flex-col justify-center">
-            <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider leading-none mb-1">Simulación</span>
+            <span className="text-[10px] font-bold text-cyan-100 uppercase tracking-wider leading-none mb-1">Simulación</span>
             <span className="text-xs font-semibold text-slate-100 capitalize leading-none">
               {formatFechaSimulacion(fechaInicioRaw, simDia)}
             </span>
           </div>
           <div className="flex flex-col justify-center">
-            <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider leading-none mb-1">Hora GMT</span>
+            <span className="text-[10px] font-bold text-cyan-100 uppercase tracking-wider leading-none mb-1">Hora GMT</span>
             <span className="text-lg font-mono text-emerald-300 font-bold leading-none tracking-wider">
               {formatoHora(simHoraMinutos)}
             </span>
@@ -628,7 +609,7 @@ export default function Home() {
 
           {/* Tiempo transcurrido */}
           <div className="flex flex-col justify-center">
-            <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider leading-none mb-1">Transcurrido</span>
+            <span className="text-[10px] font-bold text-cyan-100 uppercase tracking-wider leading-none mb-1">Transcurrido</span>
             <span className="text-xs font-mono text-indigo-200 font-semibold leading-none">
               {formatTiempoTranscurrido(simTranscurridoMinutos)}
             </span>
@@ -637,7 +618,7 @@ export default function Home() {
           {/* Tiempo Real Transcurrido */}
           {resultado?.escenario === 1 && (
             <div className="flex flex-col justify-center">
-              <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider leading-none mb-1">Tiempo Real</span>
+              <span className="text-[10px] font-bold text-cyan-100 uppercase tracking-wider leading-none mb-1">Tiempo Real</span>
               <span className="text-xs font-mono text-cyan-300 font-bold leading-none">
                 {formatTiempoReal(realElapsedMs)}
               </span>
@@ -647,7 +628,7 @@ export default function Home() {
           {/* Barra de progreso */}
           {maxTotalMinutos !== null && maxTotalMinutos > 0 && (
             <div className="flex flex-col justify-center w-20">
-              <div className="flex justify-between text-[10px] font-bold text-slate-300 mb-1">
+              <div className="flex justify-between text-[10px] font-bold text-cyan-100 mb-1">
                 <span>Progreso</span>
                 <span>{Math.round(progresoSimulacion * 100)}%</span>
               </div>
@@ -700,7 +681,7 @@ export default function Home() {
 
         {/* Hora Real */}
         <div className="flex flex-col items-end justify-center shrink-0">
-          <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider leading-none mb-1">Hora actual</span>
+          <span className="text-[10px] font-bold text-cyan-100 uppercase tracking-wider leading-none mb-1">Hora actual</span>
           <span className="text-sm font-mono text-slate-100 font-semibold leading-none">
             {horaReal.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
           </span>
@@ -778,7 +759,7 @@ export default function Home() {
           {globalStatsAeropuertos && globalStatsAeropuertos.capacidad > 0 && (
             <div className="absolute bottom-10 left-20 z-[500] pointer-events-none">
               <div className="bg-[#0c1a30]/90 border border-slate-700/50 rounded-xl px-3 py-2.5 backdrop-blur-sm min-w-[190px]">
-                <p className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Ocupación Global</p>
+                <p className="text-[9px] font-semibold text-slate-300 uppercase tracking-wider mb-2">Ocupación Global</p>
                 {(() => {
                   const pct = Math.round((globalStatsAeropuertos.carga / globalStatsAeropuertos.capacidad) * 100);
                   const color = pct > umbralAmbar ? 'text-red-400'   : pct > umbralVerde ? 'text-amber-400'  : 'text-emerald-400';
@@ -847,8 +828,6 @@ export default function Home() {
                     onUmbralVerde={handleUmbralVerde}
                     onUmbralAmbar={handleUmbralAmbar}
                     onReiniciar={handleReiniciar}
-                    duracionAnimacionMinutos={duracionAnimacionMinutos}
-                    onDuracionAnimacion={setDuracionAnimacionMinutos}
                     escenario={resultado.escenario}
                     diasSimulados={diasSimulados}
                   />
