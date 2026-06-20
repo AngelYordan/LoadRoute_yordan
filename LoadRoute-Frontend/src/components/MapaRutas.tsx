@@ -270,9 +270,66 @@ export default function MapaRutas({
   const vuelosCanceladosHoy = useMemo(() => {
     if (!resultado?.cancelacionesPorDiaSA || !resultado.vuelosMaestros) return [];
     const ids = resultado.cancelacionesPorDiaSA[simDia] || [];
-    const vuelos = ids.map(id => resultado.vuelosMaestros?.find(v => v.id === id)).filter(Boolean);
+    const vuelos = ids.map(id => resultado.vuelosMaestros?.find(v => v.vueloId === id)).filter(Boolean);
     return vuelos;
   }, [resultado?.cancelacionesPorDiaSA, resultado?.vuelosMaestros, simDia]);
+
+  const activeMasterPlanesToday = useMemo(() => {
+    if (!resultado?.vuelosMaestros) return [];
+    const active: TramoDTO[] = [];
+    for (const v of resultado.vuelosMaestros) {
+      // 1. Check if flying today (diaOffset = simDia)
+      const tToday = { ...v, diaOffset: simDia };
+      if (isFlying(tToday, simTiempoMinutos)) {
+        active.push(tToday);
+        continue;
+      }
+      // 2. Check if flying yesterday and crosses midnight (diaOffset = simDia - 1)
+      if (simDia > 0) {
+        const tYesterday = { ...v, diaOffset: simDia - 1 };
+        if (isFlying(tYesterday, simTiempoMinutos)) {
+          active.push(tYesterday);
+        }
+      }
+    }
+    return active;
+  }, [resultado?.vuelosMaestros, simDia, simTiempoMinutos]);
+
+  const activePlanesSAKeys = useMemo(() => {
+    return new Set(activePlanesSA.map(p => `${p.vueloId}-${p.diaOffset}`));
+  }, [activePlanesSA]);
+
+  const activePlanesALNSKeys = useMemo(() => {
+    return new Set(activePlanesALNS.map(p => `${p.vueloId}-${p.diaOffset}`));
+  }, [activePlanesALNS]);
+
+  const emptyPlanesSA = useMemo(() => {
+    if (!mostrarSA) return [];
+    return activeMasterPlanesToday.filter(v => {
+      if (activePlanesSAKeys.has(`${v.vueloId}-${v.diaOffset}`)) return false;
+      const ids = resultado?.cancelacionesPorDiaSA?.[v.diaOffset];
+      if (ids && ids.includes(v.vueloId)) return false;
+      return true;
+    });
+  }, [mostrarSA, activeMasterPlanesToday, activePlanesSAKeys, resultado?.cancelacionesPorDiaSA]);
+
+  const emptyPlanesALNS = useMemo(() => {
+    if (!mostrarALNS) return [];
+    return activeMasterPlanesToday.filter(v => {
+      if (activePlanesALNSKeys.has(`${v.vueloId}-${v.diaOffset}`)) return false;
+      const ids = resultado?.cancelacionesPorDiaALNS?.[v.diaOffset];
+      if (ids && ids.includes(v.vueloId)) return false;
+      return true;
+    });
+  }, [mostrarALNS, activeMasterPlanesToday, activePlanesALNSKeys, resultado?.cancelacionesPorDiaALNS]);
+
+  const emptyPlanesSAFiltered = useMemo(() => {
+    return filtrarAvionesPorAeropuerto(emptyPlanesSA, filtrosAviones);
+  }, [emptyPlanesSA, filtrosAviones]);
+
+  const emptyPlanesALNSFiltered = useMemo(() => {
+    return filtrarAvionesPorAeropuerto(emptyPlanesALNS, filtrosAviones);
+  }, [emptyPlanesALNS, filtrosAviones]);
 
   if (aeropuertos.length === 0) {
     return (
@@ -318,12 +375,13 @@ export default function MapaRutas({
 
         {/* Polilíneas de vuelos cancelados del día actual */}
         {vuelosCanceladosHoy.map(vuelo => {
-          const origen = aeropuertos.find(a => a.codigo === vuelo.origenCodigo);
-          const destino = aeropuertos.find(a => a.codigo === vuelo.destinoCodigo);
+          if (!vuelo) return null;
+          const origen = aeropuertos.find(a => a.codigo === vuelo.origen);
+          const destino = aeropuertos.find(a => a.codigo === vuelo.destino);
           if (!origen || !destino) return null;
           return (
             <Polyline
-              key={`canceled-${vuelo.id}`}
+              key={`canceled-${vuelo.vueloId}`}
               positions={[[origen.latitud, origen.longitud], [destino.latitud, destino.longitud]]}
               color="#ef4444"
               weight={2}
@@ -332,7 +390,7 @@ export default function MapaRutas({
             >
               <Tooltip direction="top" className="canceled-tooltip">
                 <span className="font-bold text-red-500">🚫 Vuelo Cancelado</span><br />
-                {vuelo.origenCodigo} → {vuelo.destinoCodigo}
+                {vuelo.origen} → {vuelo.destino}
               </Tooltip>
             </Polyline>
           );
@@ -362,6 +420,20 @@ export default function MapaRutas({
           />
         ))}
 
+        {/* Aviones SA vacíos en vuelo */}
+        {mostrarSA && emptyPlanesSAFiltered.map((t) => (
+          <PlaneMarker
+            key={`plane-sa-empty-${t.vueloId}-${t.diaOffset}`}
+            tramo={t}
+            carga={0}
+            simTiempoMinutos={simTiempoMinutos}
+            umbralVerde={umbralVerde}
+            umbralAmbar={umbralAmbar}
+            prefix="sa-empty"
+            onSelectVuelo={onSelectVuelo}
+          />
+        ))}
+
         {/* Aviones ALNS en vuelo */}
         {mostrarALNS && activePlanesALNS.map((t) => (
           <PlaneMarker
@@ -372,6 +444,20 @@ export default function MapaRutas({
             umbralVerde={umbralVerde}
             umbralAmbar={umbralAmbar}
             prefix="alns"
+            onSelectVuelo={onSelectVuelo}
+          />
+        ))}
+
+        {/* Aviones ALNS vacíos en vuelo */}
+        {mostrarALNS && emptyPlanesALNSFiltered.map((t) => (
+          <PlaneMarker
+            key={`plane-alns-empty-${t.vueloId}-${t.diaOffset}`}
+            tramo={t}
+            carga={0}
+            simTiempoMinutos={simTiempoMinutos}
+            umbralVerde={umbralVerde}
+            umbralAmbar={umbralAmbar}
+            prefix="alns-empty"
             onSelectVuelo={onSelectVuelo}
           />
         ))}
