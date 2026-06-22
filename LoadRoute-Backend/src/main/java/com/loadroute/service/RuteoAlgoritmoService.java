@@ -434,7 +434,8 @@ public class RuteoAlgoritmoService {
                     .setTemperaturaInicial(1_000.0)
                     .setTemperaturaMinima(1.0)
                     .setTiempoPlanificacion(loteFin)
-                    .setPeriodoString(formatoLote(loteInicio, loteFin));
+                    .setPeriodoString(formatoLote(loteInicio, loteFin))
+                    .setTiempoMaxMs((long) (getSa() * 60_000 * 0.9));
             report(progress, 35 + (60 * loteCount / totalLotes), "SA lote: " + formatoLote(loteInicio, loteFin));
             long t0 = System.currentTimeMillis();
             SolucionEstado solSA = sa.optimizar(pendientesSA);
@@ -541,7 +542,8 @@ public class RuteoAlgoritmoService {
                     .setTemperaturaInicial(1_000.0)
                     .setTemperaturaMinima(0.1)
                     .setTiempoPlanificacion(dia.atTime(23, 59, 59))
-                    .setPeriodoString(dia.toString());
+                    .setPeriodoString(dia.toString())
+                    .setTiempoMaxMs((long) (getSa() * 60_000 * 0.9));
             report(progress, 35 + (60 * diaCount / totalDias), "E2-SA dia: " + dia);
             long t0 = System.currentTimeMillis();
             SolucionEstado solSA = sa.optimizar(pendientesSA);
@@ -647,7 +649,8 @@ public class RuteoAlgoritmoService {
                     .setTemperaturaInicial(800.0)
                     .setTemperaturaMinima(0.5)
                     .setTiempoPlanificacion(dia.atTime(23, 59, 59))
-                    .setPeriodoString(dia.toString());
+                    .setPeriodoString(dia.toString())
+                    .setTiempoMaxMs((long) (getSa() * 60_000 * 0.9));
             report(progress, 35 + (60 * diaCount / totalDias), "E3-SA dia: " + dia);
             long t0 = System.currentTimeMillis();
             SolucionEstado solSA = sa.optimizar(pendientesSA);

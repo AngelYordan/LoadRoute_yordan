@@ -599,6 +599,11 @@ public class SimulatedAnnealing {
         return this;
     }
 
+    public SimulatedAnnealing setTiempoMaxMs(long ms) {
+        this.tiempoMaxMs = ms;
+        return this;
+    }
+
     public SimulatedAnnealing setMaxReheats(int n) {
         this.maxReheats = n;
         return this;
