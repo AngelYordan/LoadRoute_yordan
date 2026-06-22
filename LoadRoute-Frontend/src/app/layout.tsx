@@ -7,7 +7,7 @@ const inter = Inter({ subsets: ['latin'], weight: ['300', '400', '500', '600', '
 
 export const metadata: Metadata = {
   title: 'LoadRoute',
-  description: 'Sistema de Planificación y Ruteo Logístico de Equipaje — Simulated Annealing & ALNS',
+  description: 'Sistema de Planificación y Ruteo Logístico de Equipaje — Simulated Annealing',
   icons: {
     icon: '/favicon.svg',
     apple: '/favicon.svg',

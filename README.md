@@ -18,7 +18,6 @@ LoadRoute es una plataforma diseñada para resolver el problema de ruteo de env�
 ### Core & Algoritmos (Backend)
 - **Java 17 & Spring Boot 3.2**: Base robusta para el motor de optimización.
 - **MySQL 8+**: Persistencia de aeropuertos, vuelos y envíos cargados desde el frontend.
-- **ALNS (Adaptive Large Neighborhood Search)**: Algoritmo de vecindad variable para explorar soluciones complejas.
 - **Simulated Annealing (SA)**: Metaheurística de enfriamiento para escapar de óptimos locales.
 - **Temporal Occupancy Engine**: Seguimiento exacto minuto a minuto de la carga en cada aeropuerto.
 
@@ -81,7 +80,7 @@ Accede a la interfaz en `http://localhost:3000`.
 ## 📁 Estructura del Proyecto
 - **/LoadRoute-Backend**: Código fuente de la API y el motor algorítmico.
 - **/LoadRoute-Frontend**: Dashboard de usuario y visualización de mapas.
-- **/docs**: (Opcional) Documentación adicional sobre los algoritmos ALNS/SA.
+- **/docs**: (Opcional) Documentación adicional sobre los algoritmo SA.
 
 ## 📄 Formato de Datos
 El sistema consume datos a través de archivos `.txt`:

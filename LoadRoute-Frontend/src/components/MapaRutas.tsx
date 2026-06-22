@@ -15,7 +15,7 @@ import { RutaResponse, AeropuertoDTO, FiltrosAvionesMapa, RutaMuestra, TramoDTO 
 import { IconMap } from '@/components/icons';
 import 'leaflet/dist/leaflet.css';
 
-type ModoMapa = 'sa' | 'alns' | 'ambos';
+type ModoMapa = 'sa';
 type IndiceCargaAeropuerto = {
   inicios: number[];
   cargasInicio: number[];
@@ -43,8 +43,8 @@ const AIRPORT_COLLAPSE_RED = '#ef4444';
 
 function isAirportCollapsed(cargaActual: number, capacidadMax: number): boolean {
   if (capacidadMax <= 0) return false;
-  // Colapso ahora ocurre al 70% o más de la capacidad
-  return cargaActual >= capacidadMax * 0.7;
+  // Colapso ocurre al 100% de la capacidad (aeropuerto completamente lleno)
+  return cargaActual >= capacidadMax;
 }
 
 // Semáforo dinámico de Aviones
@@ -74,8 +74,8 @@ const AjustadorMapa: React.FC<{ aeropuertos: AeropuertoDTO[] }> = ({ aeropuertos
 // Iconos de avión según semáforo
 function crearIconoAvion(color: string, angle: number): L.DivIcon {
   const svg = encodeURIComponent(`
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-      <path fill="${color}" stroke="white" stroke-width="1.25" stroke-linejoin="round"
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+      <path fill="${color}" stroke="white" stroke-width="1" stroke-linejoin="round"
         d="M30 16c0 .85-.62 1.56-1.46 1.7l-9.36 1.47-4.86 9.1c-.34.64-1.2.75-1.7.22l-2.17-2.28 2.73-6.08-5.78.84-2.9 2.95c-.36.36-.9.45-1.36.22l-1.1-.55 2.18-5.43v-4.32L2.04 8.41l1.1-.55c.46-.23 1-.14 1.36.22l2.9 2.95 5.78.84-2.73-6.08 2.17-2.28c.5-.53 1.36-.42 1.7.22l4.86 9.1 9.36 1.47c.84.14 1.46.85 1.46 1.7z"/>
     </svg>
   `);
@@ -93,7 +93,7 @@ function crearIconoAeropuerto(collapsed: boolean): L.DivIcon {
   
   // Nuevo diseño: un círculo moderno con un icono minimalista de torre de control/edificio
   const svg = encodeURIComponent(`
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
       <circle cx="32" cy="32" r="28" fill="${color}" stroke="white" stroke-width="4" />
       <path fill="white" d="M24 42V26l8-8 8 8v16H24zm4-12v4h8v-4h-8z"/>
     </svg>
@@ -105,10 +105,8 @@ function crearIconoAeropuerto(collapsed: boolean): L.DivIcon {
     className: `loadroute-airport-marker${extraClass}`,
     html: `<div style="width:30px;height:30px;background:url('data:image/svg+xml,${svg}') center/contain no-repeat; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5)); z-index: 5000;"></div>`,
     iconSize: [30, 30],
-    iconAnchor: [15, 15],
+    iconAnchor: [15, 15]
     // Forzar zIndex alto en el marker
-    zIndex: 5000,
-    zIndexOffset: 5000,
   });
 }
 
@@ -215,38 +213,26 @@ export default function MapaRutas({
   umbralVerde,
   umbralAmbar,
   modoMapa,
-  onModoMapa,
   filtrosAviones,
 }: MapaRutasProps) {
   const aeropuertos = resultado?.aeropuertos || [];
   const resultadoSA = resultado?.resultadoSA;
-  const resultadoALNS = resultado?.resultadoALNS;
   const mostrarSA = true;
-  const mostrarALNS = false;
 
   const rutasMuestraSA = useMemo(() => resultadoSA?.rutasMuestra || [], [resultadoSA?.rutasMuestra]);
-  const rutasMuestraALNS = useMemo(() => resultadoALNS?.rutasMuestra || [], [resultadoALNS?.rutasMuestra]);
   const statsAeropuertos = useMemo(() => calcularStatsAeropuertos(rutasMuestraSA), [rutasMuestraSA]);
   const tramosSA = useMemo(() => rutasMuestraSA.flatMap(r => r.tramos), [rutasMuestraSA]);
-  const tramosALNS = useMemo(() => rutasMuestraALNS.flatMap(r => r.tramos), [rutasMuestraALNS]);
   const tramosVisiblesSA = useMemo(
     () => filtrarAvionesPorAeropuerto(tramosSA, filtrosAviones),
     [tramosSA, filtrosAviones]
   );
-  const tramosVisiblesALNS = useMemo(
-    () => filtrarAvionesPorAeropuerto(tramosALNS, filtrosAviones),
-    [tramosALNS, filtrosAviones]
-  );
   const cargaPorVueloSA = useMemo(() => calcularCargaPorVuelo(rutasMuestraSA), [rutasMuestraSA]);
-  const cargaPorVueloALNS = useMemo(() => calcularCargaPorVuelo(rutasMuestraALNS), [rutasMuestraALNS]);
   const rutasParaCarga = useMemo(() => {
     if (modoMapa === 'sa') return resultadoSA?.rutasMuestra || [];
-    if (modoMapa === 'alns') return resultadoALNS?.rutasMuestra || resultadoSA?.rutasMuestra || [];
     return [
       ...(resultadoSA?.rutasMuestra || []),
-      ...(resultadoALNS?.rutasMuestra || []),
     ];
-  }, [modoMapa, resultadoSA?.rutasMuestra, resultadoALNS?.rutasMuestra]);
+  }, [modoMapa, resultadoSA?.rutasMuestra]);
   const indiceCargasAeropuertos = useMemo(
     () => construirIndiceCargasAeropuertos(rutasParaCarga),
     [rutasParaCarga]
@@ -260,10 +246,6 @@ export default function MapaRutas({
   const activePlanesSA = useMemo(
     () => mostrarSA ? getActiveFlights(tramosVisiblesSA, simTiempoMinutos) : [],
     [mostrarSA, tramosVisiblesSA, simTiempoMinutos]
-  );
-  const activePlanesALNS = useMemo(
-    () => mostrarALNS ? getActiveFlights(tramosVisiblesALNS, simTiempoMinutos) : [],
-    [mostrarALNS, tramosVisiblesALNS, simTiempoMinutos]
   );
 
   const simDia = Math.floor(simTiempoMinutos / 1440);
@@ -299,10 +281,6 @@ export default function MapaRutas({
     return new Set(activePlanesSA.map(p => `${p.vueloId}-${p.diaOffset}`));
   }, [activePlanesSA]);
 
-  const activePlanesALNSKeys = useMemo(() => {
-    return new Set(activePlanesALNS.map(p => `${p.vueloId}-${p.diaOffset}`));
-  }, [activePlanesALNS]);
-
   const emptyPlanesSA = useMemo(() => {
     if (!mostrarSA) return [];
     return activeMasterPlanesToday.filter(v => {
@@ -313,23 +291,9 @@ export default function MapaRutas({
     });
   }, [mostrarSA, activeMasterPlanesToday, activePlanesSAKeys, resultado?.cancelacionesPorDiaSA]);
 
-  const emptyPlanesALNS = useMemo(() => {
-    if (!mostrarALNS) return [];
-    return activeMasterPlanesToday.filter(v => {
-      if (activePlanesALNSKeys.has(`${v.vueloId}-${v.diaOffset}`)) return false;
-      const ids = resultado?.cancelacionesPorDiaALNS?.[v.diaOffset];
-      if (ids && ids.includes(v.vueloId)) return false;
-      return true;
-    });
-  }, [mostrarALNS, activeMasterPlanesToday, activePlanesALNSKeys, resultado?.cancelacionesPorDiaALNS]);
-
   const emptyPlanesSAFiltered = useMemo(() => {
     return filtrarAvionesPorAeropuerto(emptyPlanesSA, filtrosAviones);
   }, [emptyPlanesSA, filtrosAviones]);
-
-  const emptyPlanesALNSFiltered = useMemo(() => {
-    return filtrarAvionesPorAeropuerto(emptyPlanesALNS, filtrosAviones);
-  }, [emptyPlanesALNS, filtrosAviones]);
 
   if (aeropuertos.length === 0) {
     return (
@@ -430,34 +394,6 @@ export default function MapaRutas({
             umbralVerde={umbralVerde}
             umbralAmbar={umbralAmbar}
             prefix="sa-empty"
-            onSelectVuelo={onSelectVuelo}
-          />
-        ))}
-
-        {/* Aviones ALNS en vuelo */}
-        {mostrarALNS && activePlanesALNS.map((t) => (
-          <PlaneMarker
-            key={`plane-alns-${t.vueloId}-${t.diaOffset}`}
-            tramo={t}
-            carga={cargaPorVueloALNS[`${t.vueloId}-${t.diaOffset}`] || 0}
-            simTiempoMinutos={simTiempoMinutos}
-            umbralVerde={umbralVerde}
-            umbralAmbar={umbralAmbar}
-            prefix="alns"
-            onSelectVuelo={onSelectVuelo}
-          />
-        ))}
-
-        {/* Aviones ALNS vacíos en vuelo */}
-        {mostrarALNS && emptyPlanesALNSFiltered.map((t) => (
-          <PlaneMarker
-            key={`plane-alns-empty-${t.vueloId}-${t.diaOffset}`}
-            tramo={t}
-            carga={0}
-            simTiempoMinutos={simTiempoMinutos}
-            umbralVerde={umbralVerde}
-            umbralAmbar={umbralAmbar}
-            prefix="alns-empty"
             onSelectVuelo={onSelectVuelo}
           />
         ))}

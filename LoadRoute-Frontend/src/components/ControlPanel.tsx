@@ -14,7 +14,6 @@ interface ControlPanelProps {
   onCargando: (cargando: boolean) => void;
   onFechaInicio?: (fecha: string) => void;
   onFechaFin?: (fecha: string) => void;
-  onDuracionSimulacion?: (minutos: number) => void;
   onProgressJob?: (job: SimulacionJob) => void;
 }
 
@@ -27,24 +26,21 @@ const ESCENARIOS = [
   {
     id: 1,
     titulo: 'Simulación de Periodo',
-    subtitulo: 'Sin interrupciones — SA',
-    descripcion: 'Simulación completa del periodo sin cancelaciones. SA optimiza en condiciones ideales para establecer el baseline de rendimiento.',
+    descripcion: 'Simulación con data histórica para un periodo definido.',
     icono: <IconChart size={18} />,
     color: 'cyan',
   },
   {
     id: 2,
     titulo: 'Operación Día a Día',
-    subtitulo: 'Baja interrupción — SA',
-    descripcion: 'Operación real con cancelación leve (~1% de vuelos/día). SA replanifica diariamente. El estado de la red evoluciona progresivamente.',
+    descripcion: 'Operación diaria con llegada de envíos y vuelos en tiempo real.',
     icono: <IconBolt size={18} />,
     color: 'blue',
   },
   {
     id: 3,
     titulo: 'Operación de Colapso',
-    subtitulo: 'Cancelación agresiva — SA',
-    descripcion: 'Cancelación acumulativa del 5% de vuelos por día. SA replanifica bajo estrés progresivo hasta alcanzar el punto de colapso.',
+    descripcion: 'Simulación que funciona hasta que el sistema entra en colapso.',
     icono: <IconRefresh size={18} />,
     color: 'amber',
   },
@@ -63,14 +59,6 @@ const MODOS_PERIODO = [
 ] as const;
 
 type ModoPeriodo = typeof MODOS_PERIODO[number]['id'];
-
-const DURACION_PERIODO_MIN  = 5;
-const DURACION_PERIODO_MAX  = 90;
-const DURACION_PERIODO_STEP = 5;
-
-function duracionAnimacionPorDefecto(escenarioId: number): number {
-  return escenarioId === 1 ? 60 : 15;
-}
 
 function toBackendDate(htmlDate: string): string {
   return htmlDate.replace(/-/g, '');
@@ -129,14 +117,13 @@ const colorMapActive: Record<string, string> = {
   amber: 'border-amber-400 bg-amber-500/20 ring-1 ring-amber-400/30',
 };
 
-export default function ControlPanel({ onResultado, onError, onCargando, onFechaInicio, onFechaFin, onDuracionSimulacion, onProgressJob }: ControlPanelProps) {
+export default function ControlPanel({ onResultado, onError, onCargando, onFechaInicio, onFechaFin, onProgressJob }: ControlPanelProps) {
   const [archivos, setArchivos] = useState<Record<string, FileState>>({
     aeropuertos: { files: [], name: '' },
     vuelos:      { files: [], name: '' },
     envios:      { files: [], name: '' },
   });
   const [escenario,              setEscenario]              = useState(1);
-  const [duracionPeriodoMinutos, setDuracionPeriodoMinutos] = useState(60); // se ajusta al cambiar escenario
   const [modoPeriodo,            setModoPeriodo]            = useState<ModoPeriodo>('semanal');
   const [fechaInicio,            setFechaInicio]            = useState('');
   const [horaInicio,             setHoraInicio]             = useState('00:00');
@@ -155,8 +142,8 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
     [fechaInicio, horaInicio, periodoSeleccionado.dias]
   );
   const fechaInicioBackend = fechaInicio ? toBackendDateTime(fechaInicio, horaInicio) : undefined;
-  const fechaFinBackend = fechaFinCalculada ? toBackendDateTimeFromDate(fechaFinCalculada) : undefined;
-  const esSimulacionPeriodo = escenario === 1;
+  const fechaFinBackend = escenario === 1 && fechaFinCalculada ? toBackendDateTimeFromDate(fechaFinCalculada) : undefined;
+  const esSimulacionPeriodo = escenario === 1 || escenario === 3; // Solo Escenario 1 y 3 requieren periodo definido
   const archivosCargados = Object.values(archivos).filter(state => state.files.length > 0).length;
   const inicioPeriodoValido = !esSimulacionPeriodo || Boolean(fechaInicio);
 
@@ -197,7 +184,6 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
     setEjecutando(true);
     onCargando(true);
     onError('');
-    onDuracionSimulacion?.(esSimulacionPeriodo ? duracionPeriodoMinutos : duracionAnimacionPorDefecto(escenario));
     onFechaInicio?.(esSimulacionPeriodo ? (fechaInicioBackend || '') : '');
     onFechaFin?.(esSimulacionPeriodo ? (fechaFinBackend || '') : '');
     setProgreso({ jobId: '', status: 'PENDING', progress: 0, message: 'Preparando simulacion...' });
@@ -208,8 +194,10 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
         archivos.envios.files,
         escenario,
         esSimulacionPeriodo ? fechaInicioBackend : undefined,
-        esSimulacionPeriodo ? fechaFinBackend    : undefined,
+        escenario === 1 ? fechaFinBackend : undefined,
         'sa',
+        undefined,
+        undefined,
         (job) => {
           setProgreso(job);
           if (onProgressJob) onProgressJob(job);
@@ -242,7 +230,6 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
                 key={esc.id}
                 onClick={() => {
                   setEscenario(esc.id);
-                  setDuracionPeriodoMinutos(duracionAnimacionPorDefecto(esc.id));
                 }}
                 className={`text-left rounded-lg border p-3 transition-all duration-200 hover:scale-[1.02]
                   ${isActive ? colorMapActive[esc.color] : colorMap[esc.color]}`}
@@ -251,7 +238,6 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
                   <span className="mt-0.5 shrink-0 opacity-90">{esc.icono}</span>
                   <div className="min-w-0">
                     <p className="text-xs font-semibold text-slate-100 leading-tight">{esc.titulo}</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5 leading-tight">{esc.subtitulo}</p>
                   </div>
                 </div>
                 {isActive && (
@@ -336,28 +322,31 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
         {esSimulacionPeriodo && (
         <div className="flex flex-col gap-2">
           <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-            <span>📅</span> Periodo
+            <span>📅</span> CONFIGURACIÓN
           </h3>
 
+          {/* 🌟 CONDICIONAL: Botones de Periodo solo en Escenario 1 */}
+          {escenario === 1 && (
           <div className="grid grid-cols-3 gap-1.5">
             {MODOS_PERIODO.map(modo => {
               const isActive = modoPeriodo === modo.id;
-              return (
-                <button
-                  key={modo.id}
-                  type="button"
-                  onClick={() => setModoPeriodo(modo.id)}
-                  className={`rounded-lg border px-2 py-2 text-[10px] font-semibold transition-all
-                    ${isActive
-                      ? 'border-cyan-400 bg-cyan-500/20 text-cyan-100 ring-1 ring-cyan-400/20'
-                      : 'border-slate-700 bg-slate-800/40 text-slate-400 hover:border-cyan-500/40 hover:text-slate-200'
-                    }`}
-                >
-                  {modo.label}
-                </button>
-              );
-            })}
-          </div>
+                return (
+                  <button
+                    key={modo.id}
+                    type="button"
+                    onClick={() => setModoPeriodo(modo.id)}
+                    className={`rounded-lg border px-2 py-2 text-[10px] font-semibold transition-all
+                      ${isActive
+                        ? 'border-cyan-400 bg-cyan-500/20 text-cyan-100 ring-1 ring-cyan-400/20'
+                        : 'border-slate-700 bg-slate-800/40 text-slate-400 hover:border-cyan-500/40 hover:text-slate-200'
+                      }`}
+                  >
+                    {modo.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           {/* Fecha + Hora Inicio */}
           <div className="rounded-lg border border-slate-700/40 bg-slate-800/20 p-2 space-y-1.5">
@@ -394,28 +383,6 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
             <span>{fechaInicio ? `Duración: ${periodoSeleccionado.dias} días` : 'Selecciona inicio para calcular el periodo'}</span>
           </p>
 
-          {/* Duración animación */}
-          <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3 mt-1">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Duración Anim.</span>
-              <span className="text-xs font-bold px-2 py-0.5 rounded border text-cyan-100 bg-cyan-500/15 border-cyan-400/30">
-                {duracionPeriodoMinutos} min
-              </span>
-            </div>
-            <input
-              type="range"
-              min={DURACION_PERIODO_MIN}
-              max={DURACION_PERIODO_MAX}
-              step={DURACION_PERIODO_STEP}
-              value={duracionPeriodoMinutos}
-              onChange={e => setDuracionPeriodoMinutos(Number(e.target.value))}
-              className="w-full cursor-pointer accent-cyan-400"
-            />
-            <div className="flex justify-between text-[9px] font-medium text-slate-500 mt-1">
-              <span>{DURACION_PERIODO_MIN}m (rápido)</span>
-              <span>{DURACION_PERIODO_MAX}m</span>
-            </div>
-          </div>
         </div>
         )}
       </div>

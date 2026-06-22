@@ -20,7 +20,9 @@ export async function ejecutarSimulacion(
   escenario: number,
   fechaInicio?: string,  // formato YYYYMMDD o YYYYMMDDHHmm, opcional
   fechaFin?: string,     // formato YYYYMMDD o YYYYMMDDHHmm, opcional
-  algoritmos: AlgoritmoSeleccion = 'ambos',
+  algoritmos: AlgoritmoSeleccion = 'sa',
+  sa?: number,
+  k?: number,
   onProgress?: (job: SimulacionJob) => void
 ): Promise<RutaResponse[]> {
   const started = await iniciarSimulacion(
@@ -30,7 +32,9 @@ export async function ejecutarSimulacion(
     escenario,
     fechaInicio,
     fechaFin,
-    algoritmos
+    algoritmos,
+    sa,
+    k
   );
   onProgress?.(started);
 
@@ -44,7 +48,9 @@ export async function iniciarSimulacion(
   escenario: number,
   fechaInicio?: string,
   fechaFin?: string,
-  algoritmos: AlgoritmoSeleccion = 'ambos'
+  algoritmos: AlgoritmoSeleccion = 'sa',
+  sa?: number,
+  k?: number
 ): Promise<SimulacionJob> {
   const formData = new FormData();
   // Nombres de campo deben coincidir con @RequestPart del controlador
@@ -65,6 +71,8 @@ export async function iniciarSimulacion(
   if (fechaInicio) params.set('fechaInicio', fechaInicio);
   if (fechaFin) params.set('fechaFin', fechaFin);
   params.set('algoritmos', algoritmos);
+  if (sa !== undefined) params.set('sa', String(sa));
+  if (k !== undefined) params.set('k', String(k));
 
   const response = await fetch(`${API_ENDPOINTS.SIMULAR_ASYNC}?${params.toString()}`, {
     method: 'POST',

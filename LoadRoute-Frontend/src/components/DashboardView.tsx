@@ -1,0 +1,461 @@
+import React, { ReactNode } from 'react';
+import dynamic from 'next/dynamic';
+
+import SidebarInfo from './SidebarInfo';
+import SimulacionPanel from './SimulacionPanel'; 
+import SidebarFiltroMapa from './SidebarFiltroMapa';
+import SidebarVuelos from './SidebarVuelos';
+import AdminPanel from './AdminPanel';
+import ResultadosPanel from './ResultadosPanel';
+import ModalEnvio from './ModalEnvio';
+import ModalAeropuerto from './ModalAeropuerto';
+import ModalVuelo from './ModalVuelo';
+import ModalColapso from './ModalColapso';
+
+import {
+  IconPackage, IconBuilding, IconSettings, IconScreen, IconPlane, IconClipboard,
+  IconPlay, IconPause, IconStop, IconClose, IconChart, IconMap,
+  IconWarehouse, IconCheck,
+} from '@/components/icons';
+
+const MapaRutas = dynamic(() => import('@/components/MapaRutas'), {
+  ssr: false,
+  loading: () => (
+    <div className="flex flex-col items-center justify-center h-full rounded-lg bg-[#0f1f3d]/50 border border-slate-700/50">
+      <IconMap className="mb-3 text-cyan-400/60 animate-pulse" size={40} />
+      <p className="text-slate-400 text-sm">Cargando mapa...</p>
+    </div>
+  ),
+});
+
+type TabId = 'pedidos' | 'aeropuertos' | 'simulacion' | 'pantalla' | 'vuelos' | 'resultados' | 'administracion';
+
+const NAV_TABS: { id: TabId; icon: ReactNode; label: string; color: string }[] = [
+  { id: 'aeropuertos',    icon: <IconBuilding size={20} />,   label: 'Aeropuertos', color: 'emerald' },
+  { id: 'vuelos',         icon: <IconPlane size={20} />,      label: 'Vuelos',      color: 'orange'  },
+  { id: 'pedidos',        icon: <IconPackage size={20} />,    label: 'Pedidos',     color: 'blue'    },
+  { id: 'simulacion',     icon: <IconSettings size={20} />,   label: 'Simulación',  color: 'violet'  },
+  { id: 'pantalla',       icon: <IconScreen size={20} />,     label: 'Pantalla',    color: 'cyan'    },
+  { id: 'resultados',     icon: <IconChart size={20} />,      label: 'Resultados',  color: 'indigo'  },
+  { id: 'administracion', icon: <IconClipboard size={20} />,  label: 'Maestros',    color: 'rose'    },
+];
+
+interface DashboardViewProps {
+  resultado: any; 
+  fechaInicioRaw: string;
+  simDia: number;
+  simHoraMinutos: number;
+  simTranscurridoMinutos: number;
+  realElapsedMs: number;
+  progresoSimulacion: number;
+  maxTotalMinutos: number | null;
+  rangoFinalizado: boolean;
+  isPlaying: boolean;
+  horaReal: Date;
+  activeTab: TabId | null;
+  simTotalVisual: number;
+  cargasAeropuertoFinales: any;
+  vueloModal: any;
+  envioModal: any;
+  aeroModal: any;
+  colapsoDatos: any;
+  umbralVerde: number;
+  umbralAmbar: number;
+  filtrosAvionesMapa: any;
+  globalStatsAeropuertos: any;
+  rutasActivas: any[];
+  diasSimulados: number;
+  maxSimDia: number | null;
+
+  setIsPlaying: (play: boolean) => void;
+  handleStop: () => void;
+  handleTabClick: (tabId: TabId) => void;
+  handleSelectVuelo: (vuelo: any) => void;
+  getPanelWidth: (tab: TabId | null) => string;
+  setActiveTab: (tab: TabId | null) => void;
+  setEnvioModal: (modal: any) => void;
+  setAeroModal: (modal: any) => void;
+  setVueloModal: (modal: any) => void;
+  setColapsoDatos: (modal: any) => void;
+  handleUmbralVerde: (val: number) => void;
+  handleUmbralAmbar: (val: number) => void;
+  handleReiniciar: () => void;
+  setFiltrosAvionesMapa: (filtros: any) => void;
+
+  formatFechaSimulacion: (fecha: string, dia: number) => string;
+  formatoHora: (minutos: number) => string;
+  formatTiempoTranscurrido: (minutos: number) => string;
+  formatTiempoReal: (ms: number) => string;
+}
+
+export const DashboardView: React.FC<DashboardViewProps> = ({
+  resultado,
+  fechaInicioRaw,
+  simDia,
+  simHoraMinutos,
+  simTranscurridoMinutos,
+  realElapsedMs,
+  progresoSimulacion,
+  maxTotalMinutos,
+  rangoFinalizado,
+  isPlaying,
+  horaReal,
+  activeTab,
+  simTotalVisual,
+  cargasAeropuertoFinales,
+  vueloModal,
+  envioModal,
+  aeroModal,
+  colapsoDatos,
+  umbralVerde,
+  umbralAmbar,
+  filtrosAvionesMapa,
+  globalStatsAeropuertos,
+  rutasActivas,
+  diasSimulados,
+  maxSimDia,
+  setIsPlaying,
+  handleStop,
+  handleTabClick,
+  handleSelectVuelo,
+  getPanelWidth,
+  setActiveTab,
+  setEnvioModal,
+  setAeroModal,
+  setVueloModal,
+  setColapsoDatos,
+  handleUmbralVerde,
+  handleUmbralAmbar,
+  handleReiniciar,
+  setFiltrosAvionesMapa,
+  formatFechaSimulacion,
+  formatoHora,
+  formatTiempoTranscurrido,
+  formatTiempoReal,
+}) => {
+  // ── MATRIZ DE CONFIGURACIÓN POR ESCENARIO ──
+  const escenario = resultado?.escenario ?? 1;
+
+  const mostrarControlesYTranscurrido = escenario === 1 || escenario === 3;
+  const mostrarProgreso = escenario === 1; // 🌟 Único que conserva la barra
+  const mostrarFechaSimulacion = escenario === 1 || escenario === 3;
+
+  const labelEscenario = 
+    escenario === 1 ? 'Simulación' : 
+    escenario === 2 ? 'Operación' : 'Colapso';
+
+  return (
+    <div className="h-screen bg-[#0a1628] flex flex-col overflow-hidden text-slate-200">
+
+      {/* ── HEADER ── */}
+      <header className="bg-[#0f1f3d] border-b border-slate-700/50 px-4 py-0 flex items-center gap-3 shrink-0 h-14">
+        {/* Logo */}
+        <img src="/logo.png" alt="LoadRoute Logo" className="h-8 shrink-0" />
+        <div className="w-px h-6 bg-slate-700/60 shrink-0" />
+
+        {/* Bloque de Tiempos dinámicos */}
+        <div className="flex items-center gap-4 flex-1">
+          
+          {/* Bloque de Fecha Ajustado */}
+          <div className="flex flex-col justify-center">
+            <span className="text-[10px] font-bold text-cyan-100 uppercase tracking-wider leading-none mb-1">
+              {labelEscenario}
+            </span>
+            <span className="text-xs font-semibold text-slate-100 capitalize leading-none">
+              {mostrarFechaSimulacion
+                ? formatFechaSimulacion(fechaInicioRaw, simDia)
+                : horaReal.toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })
+              }
+            </span>
+          </div>
+
+          {/* Reloj GMT */}
+          <div className="flex flex-col justify-center">
+            <span className="text-[10px] font-bold text-cyan-100 uppercase tracking-wider leading-none mb-1">Hora GMT</span>
+            <span className="text-lg font-mono text-emerald-300 font-bold leading-none tracking-wider">
+              {formatoHora(simHoraMinutos)}
+            </span>
+          </div>
+
+          {/* Tiempo transcurrido (Habilitado para Escenarios 1 y 3) */}
+          {mostrarControlesYTranscurrido && (
+            <div className="flex flex-col justify-center">
+              <span className="text-[10px] font-bold text-cyan-100 uppercase tracking-wider leading-none mb-1">Transcurrido</span>
+              <span className="text-xs font-mono text-indigo-200 font-semibold leading-none">
+                {formatTiempoTranscurrido(simTranscurridoMinutos)}
+              </span>
+            </div>
+          )}
+
+          {/* Tiempo Real de Cómputo (Solo Lotes) */}
+          {escenario === 1 && (
+            <div className="flex flex-col justify-center">
+              <span className="text-[10px] font-bold text-cyan-100 uppercase tracking-wider leading-none mb-1">Tiempo Real</span>
+              <span className="text-xs font-mono text-cyan-300 font-bold leading-none">
+                {formatTiempoReal(realElapsedMs)}
+              </span>
+            </div>
+          )}
+
+          {/* Barra de progreso (Solo Escenario 1) */}
+          {mostrarProgreso && maxTotalMinutos !== null && maxTotalMinutos > 0 && (
+            <div className="flex flex-col justify-center w-20">
+              <div className="flex justify-between text-[10px] font-bold text-cyan-100 mb-1">
+                <span>Progreso</span>
+                <span>{Math.round(progresoSimulacion * 100)}%</span>
+              </div>
+              <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-blue-600 to-cyan-400 rounded-full transition-all duration-300"
+                  style={{ width: `${progresoSimulacion * 100}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {mostrarProgreso && rangoFinalizado && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+              <IconCheck size={12} /> Finalizado
+            </span>
+          )}
+
+          {/* Controles multimedia Play/Pause/Stop (Habilitados para Escenarios 1 y 3) */}
+          {mostrarControlesYTranscurrido && (
+            <div className="flex items-center gap-1 ml-2">
+              <button
+                id="btn-play"
+                onClick={() => setIsPlaying(true)}
+                disabled={isPlaying || (mostrarProgreso && rangoFinalizado)}
+                title="Iniciar"
+                className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold transition-all
+                  ${isPlaying || (mostrarProgreso && rangoFinalizado)
+                    ? 'bg-slate-800/50 text-slate-600 cursor-not-allowed'
+                    : 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 hover:text-emerald-300 ring-1 ring-emerald-500/30'}`}
+              ><IconPlay size={14} /></button>
+              <button
+                id="btn-pause"
+                onClick={() => setIsPlaying(false)}
+                disabled={!isPlaying}
+                title="Pausar"
+                className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold transition-all
+                  ${!isPlaying
+                    ? 'bg-slate-800/50 text-slate-600 cursor-not-allowed'
+                    : 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 hover:text-amber-300 ring-1 ring-amber-500/30'}`}
+              ><IconPause size={14} /></button>
+              <button
+                id="btn-stop"
+                onClick={handleStop}
+                title="Detener y reiniciar"
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold transition-all
+                  bg-slate-800/50 text-slate-400 hover:bg-red-500/20 hover:text-red-400 ring-1 ring-slate-700/50"
+              ><IconStop size={14} /></button>
+            </div>
+          )}
+        </div>
+
+        {/* Hora Reloj de Pared */}
+        <div className="flex flex-col items-end justify-center shrink-0">
+          <span className="text-[10px] font-bold text-cyan-100 uppercase tracking-wider leading-none mb-1">Hora actual</span>
+          <span className="text-sm font-mono text-slate-100 font-semibold leading-none">
+            {horaReal.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+          </span>
+        </div>
+        <div className="w-px h-6 bg-slate-700/60 shrink-0" />
+
+      </header>
+
+      {/* ── BODY ── */}
+      <div className="flex flex-1 overflow-hidden">
+
+        {/* ── NAV STRIP ── */}
+        <nav className="w-14 bg-[#0c1a30]/95 backdrop-blur-sm border-r border-slate-700/50 flex flex-col items-center py-4 gap-2 shrink-0 z-30">
+          {NAV_TABS.map(tab => {
+            const isActive = activeTab === tab.id;
+            const activeColors: Record<string, string> = {
+              blue:    'bg-blue-500/20 text-blue-400 shadow-blue-500/20',
+              emerald: 'bg-emerald-500/20 text-emerald-400 shadow-emerald-500/20',
+              violet:  'bg-violet-500/20 text-violet-400 shadow-violet-500/20',
+              cyan:    'bg-cyan-500/20 text-cyan-300 shadow-cyan-500/20',
+              orange:  'bg-orange-500/20 text-orange-400 shadow-orange-500/20',
+              indigo:  'bg-indigo-500/20 text-indigo-300 shadow-indigo-500/20',
+              rose:    'bg-rose-500/20 text-rose-400 shadow-rose-500/20',
+            };
+            return (
+              <div key={tab.id} className="relative group">
+                <button
+                  onClick={() => handleTabClick(tab.id)}
+                  className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200
+                    ${isActive
+                      ? `${activeColors[tab.color]} shadow-lg ring-1 ring-current/20`
+                      : 'text-slate-300 hover:text-slate-100 hover:bg-slate-700/60'}`}
+                  aria-label={tab.label}
+                >
+                  {tab.icon}
+                </button>
+                <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2.5 py-1.5
+                                bg-slate-800 text-slate-100 text-xs rounded-lg border border-slate-700
+                                whitespace-nowrap shadow-xl
+                                opacity-0 group-hover:opacity-100 transition-opacity duration-150
+                                pointer-events-none z-50">
+                  {tab.label}
+                  <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-slate-800" />
+                </div>
+              </div>
+            );
+          })}
+        </nav>
+
+        {/* ── MAPA ── */}
+        <main className="flex-1 relative overflow-hidden">
+          <MapaRutas
+            resultado={resultado}
+            simTiempoMinutos={simTotalVisual}
+            onSelectVuelo={handleSelectVuelo}
+            selectedVuelo={vueloModal}
+            umbralVerde={umbralVerde}
+            umbralAmbar={umbralAmbar}
+            modoMapa="sa"
+            onModoMapa={() => {}}
+            filtrosAviones={filtrosAvionesMapa}
+          />
+
+          {/* INDICADORES GLOBALES */}
+          {globalStatsAeropuertos && globalStatsAeropuertos.capacidad > 0 && (
+            <div className="absolute bottom-10 left-20 z-[500] pointer-events-none">
+              <div className="bg-[#0c1a30]/90 border border-slate-700/50 rounded-xl px-3 py-2.5 backdrop-blur-sm min-w-[190px]">
+                <p className="text-[9px] font-semibold text-slate-300 uppercase tracking-wider mb-2">Ocupación Global</p>
+                {(() => {
+                  const pct = Math.round((globalStatsAeropuertos.carga / globalStatsAeropuertos.capacidad) * 100);
+                  const color = pct > umbralAmbar ? 'text-red-400'   : pct > umbralVerde ? 'text-amber-400'  : 'text-emerald-400';
+                  const bg    = pct > umbralAmbar ? 'bg-red-500'     : pct > umbralVerde ? 'bg-amber-500'    : 'bg-emerald-500';
+                  const dotColor = pct > umbralAmbar ? 'bg-red-500' : pct > umbralVerde ? 'bg-amber-500' : 'bg-emerald-500';
+                  return (
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                          <IconWarehouse size={12} /> Almacenes
+                        </span>
+                        <span className={`text-[10px] font-bold ${color} flex items-center gap-1`}>
+                          <span className={`w-2 h-2 rounded-full ${dotColor}`} /> {pct}%
+                        </span>
+                      </div>
+                      <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden mb-1">
+                        <div className={`h-full rounded-full transition-all duration-500 ${bg}`} style={{ width: `${Math.min(pct,100)}%` }} />
+                      </div>
+                      <p className="text-[9px] text-slate-500">
+                        {globalStatsAeropuertos.carga.toLocaleString()} / {globalStatsAeropuertos.capacidad.toLocaleString()} maletas
+                      </p>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
+
+          {/* PANEL LATERAL IZQUIERDO */}
+          <div
+            className="absolute top-0 left-0 h-full z-[1000] overflow-hidden pointer-events-none"
+            style={{ width: getPanelWidth(activeTab), transition: 'width 0.25s ease' }}
+          >
+            <div className="pointer-events-auto h-full bg-[#0c1a30]/95 border-r border-slate-700/50 backdrop-blur-sm flex flex-col"
+                 style={{ width: getPanelWidth(activeTab) }}>
+              <div className="px-4 py-3 bg-[#0f1f3d]/80 border-b border-slate-700/50 shrink-0 flex items-center justify-between backdrop-blur-sm">
+                <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                  {NAV_TABS.find(t => t.id === activeTab)?.label ?? ''}
+                </span>
+                <button
+                  onClick={() => setActiveTab(null)}
+                  className="text-slate-600 hover:text-slate-300 text-lg leading-none transition-colors"
+                  aria-label="Cerrar panel"
+                >
+                  <IconClose size={18} />
+                </button>
+              </div>
+              <div className="flex-1 min-h-0 overflow-hidden">
+                {(activeTab === 'pedidos' || activeTab === 'aeropuertos') && (
+                  <SidebarInfo
+                    envios={rutasActivas}
+                    aeropuertos={resultado.aeropuertos}
+                    activeTab={activeTab}
+                    simTiempoMinutos={simTotalVisual}
+                    cargasAeropuertoOverride={cargasAeropuertoFinales}
+                    onSelectEnvio={setEnvioModal}
+                    onSelectAeropuerto={setAeroModal}
+                  />
+                )}
+                {activeTab === 'simulacion' && (
+                  <SimulacionPanel
+                    umbralVerde={umbralVerde}
+                    umbralAmbar={umbralAmbar}
+                    onUmbralVerde={handleUmbralVerde}
+                    onUmbralAmbar={handleUmbralAmbar}
+                    onReiniciar={handleReiniciar}
+                    escenario={resultado.escenario}
+                    diasSimulados={diasSimulados}
+                  />
+                )}
+                {activeTab === 'pantalla' && (
+                  <SidebarFiltroMapa
+                    aeropuertos={resultado.aeropuertos}
+                    filtros={filtrosAvionesMapa}
+                    onChange={setFiltrosAvionesMapa}
+                  />
+                )}
+                {activeTab === 'vuelos' && (
+                  <SidebarVuelos
+                    vuelos={resultado.vuelosMaestros || []}
+                    cancelacionesPorDia={resultado.cancelacionesPorDiaSA || []}
+                    simDia={simDia}
+                    maxDia={
+                      diasSimulados > 0
+                        ? diasSimulados - 1
+                        : maxSimDia !== null
+                          ? maxSimDia
+                          : 0
+                    }
+                    rutasActivas={rutasActivas}
+                    umbralVerde={umbralVerde}
+                    umbralAmbar={umbralAmbar}
+                  />
+                )}
+                {activeTab === 'administracion' && (
+                  <AdminPanel />
+                )}
+                {activeTab === 'resultados' && (
+                  <div className="h-full overflow-y-auto custom-scrollbar p-4">
+                    <ResultadosPanel
+                      resultadoSA={resultado.resultadoSA || null}
+                      escenario={resultado.escenario}
+                      totalVuelos={resultado.totalVuelos}
+                      totalEnvios={resultado.totalEnviosCargados}
+                      resultadoCompleto={resultado}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+
+      {/* MODALS */}
+      <ModalEnvio envio={envioModal} onClose={() => setEnvioModal(null)} />
+      <ModalAeropuerto
+        aeropuerto={aeroModal}
+        rutasActivas={rutasActivas}
+        simTiempoMinutos={simTotalVisual}
+        cargasAeropuertoOverride={cargasAeropuertoFinales}
+        onClose={() => setAeroModal(null)}
+      />
+      <ModalVuelo
+        vuelo={vueloModal}
+        rutasActivas={rutasActivas}
+        onClose={() => setVueloModal(null)}
+      />
+      <ModalColapso
+        colapso={colapsoDatos}
+        onClose={() => setColapsoDatos(null)}
+      />
+    </div>
+  );
+};

@@ -42,7 +42,7 @@ La aplicación estará en `http://localhost:3000`.
 ## 📍 Guía de Uso
 1. **Conexión**: Asegúrate de que el indicador en la pantalla de inicio diga "Backend: Conectado".
 2. **Carga**: Sube los archivos maestros necesarios para iniciar la red.
-3. **Optimización**: El dashboard mostrará los resultados de los algoritmos ALNS y SA.
+3. **Optimización**: El dashboard mostrará los resultados de los algoritmo SA.
 4. **Inspección**: Haz clic en los aeropuertos del mapa para ver el detalle de carga actual y capacidad operativa.
 
 ---

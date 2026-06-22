@@ -59,7 +59,6 @@ export interface ResultadoAlgoritmo {
 export interface RutaResponse {
   escenario: number;
   resultadoSA: ResultadoAlgoritmo | null;
-  resultadoALNS: ResultadoAlgoritmo | null;
   aeropuertos: AeropuertoDTO[];
   vuelosMaestros?: TramoDTO[];
   totalVuelos: number;
@@ -73,7 +72,6 @@ export interface RutaResponse {
   
   // Custom frontend arrays mapped from chunks
   cancelacionesPorDiaSA?: number[][];
-  cancelacionesPorDiaALNS?: number[][];
 }
 
 export interface FiltrosAvionesMapa {
@@ -94,4 +92,4 @@ export interface SimulacionJob {
   error?: string;
 }
 
-export type AlgoritmoSeleccion = 'sa' | 'alns' | 'ambos';
+export type AlgoritmoSeleccion = 'sa';

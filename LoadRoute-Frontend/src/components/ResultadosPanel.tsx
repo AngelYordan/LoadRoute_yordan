@@ -7,7 +7,6 @@ import { IconWarning, IconFilePdf, IconFileExcel } from '@/components/icons';
 
 interface ResultadosPanelProps {
   resultadoSA: ResultadoAlgoritmo | null;
-  resultadoALNS: ResultadoAlgoritmo | null;
   escenario: number;
   totalVuelos: number;
   totalEnvios: number;
@@ -152,13 +151,12 @@ function AlgoritmoBloque({ res }: { res: ResultadoAlgoritmo }) {
 
 function ResultadosPanel({
   resultadoSA,
-  resultadoALNS,
   escenario,
   totalVuelos,
   totalEnvios,
   resultadoCompleto,
 }: ResultadosPanelProps) {
-  const resultado = resultadoSA || resultadoALNS;
+  const resultado = resultadoSA;
   if (!resultado || !resultadoCompleto) return null;
 
   return (

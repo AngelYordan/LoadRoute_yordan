@@ -8,14 +8,9 @@ Este es el motor central de LoadRoute, encargado de procesar grandes volúmenes 
 - **Maven**: Gestión de dependencias y construcción.
 - **JUnit 5**: Pruebas unitarias para validación algorítmica.
 
-## 🧠 Algoritmos Implementados
+## 🧠 Algoritmos Implementado
 
-### 1. ALNS (Adaptive Large Neighborhood Search)
-El algoritmo principal para planificación masiva. Utiliza operadores de destrucción y reparación para explorar el espacio de soluciones de forma adaptativa.
-- **Destrucción**: Random Removal, Worst Removal, Related Removal.
-- **Reparación**: Greedy Insertion, Regret-2 Insertion.
-
-### 2. Simulated Annealing (SA)
+### 1. Simulated Annealing (SA)
 Utilizado para optimización en tiempo real y refinamiento de soluciones iniciales.
 - **Parámetros**: Temperatura inicial, tasa de enfriamiento (alfa) y criterio de aceptación de Metrópolis.
 
