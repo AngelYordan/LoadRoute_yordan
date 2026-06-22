@@ -1,7 +1,14 @@
 'use client';
 
 import React from 'react';
-import { IconClose, IconWarning } from '@/components/icons';
+import { 
+  IconClose, 
+  IconWarning, 
+  IconBuilding, 
+  IconPlane, 
+  IconClock, 
+  IconMapPin 
+} from '@/components/icons';
 
 export interface ColapsoDatos {
   razon: string;
@@ -39,7 +46,7 @@ function formatMomentoColapso(momentoMinutos: number, fechaInicioRaw: string): s
 }
 
 function getTipoInfo(tipo: ColapsoDatos['tipoColapso']): {
-  emoji: string;
+  icon: React.ReactNode;
   label: string;
   badgeClass: string;
   iconClass: string;
@@ -47,28 +54,28 @@ function getTipoInfo(tipo: ColapsoDatos['tipoColapso']): {
   switch (tipo) {
     case 'aeropuerto':
       return {
-        emoji: '🏢',
+        icon: <IconBuilding size={20} className="text-orange-400" />,
         label: 'Aeropuerto lleno',
         badgeClass: 'bg-orange-500/20 text-orange-300 border border-orange-500/30',
         iconClass: 'text-orange-400',
       };
     case 'avion':
       return {
-        emoji: '✈️',
+        icon: <IconPlane size={20} className="text-amber-400" />,
         label: 'Avión lleno',
         badgeClass: 'bg-amber-500/20 text-amber-300 border border-amber-500/30',
         iconClass: 'text-amber-400',
       };
     case 'sla':
       return {
-        emoji: '⏱️',
+        icon: <IconClock size={20} className="text-red-400" />,
         label: 'SLA incumplido',
         badgeClass: 'bg-red-500/20 text-red-300 border border-red-500/30',
         iconClass: 'text-red-400',
       };
     default:
       return {
-        emoji: '⚠️',
+        icon: <IconWarning size={20} className="text-red-400" />,
         label: 'Colapso general',
         badgeClass: 'bg-red-500/20 text-red-300 border border-red-500/30',
         iconClass: 'text-red-400',
@@ -117,7 +124,7 @@ export default function ModalColapso({ colapso, onClose }: ModalColapsoDatosProp
         <div className="bg-slate-800/40 border border-slate-700/50 rounded-md p-2.5">
           <p className="text-[9px] text-slate-400 uppercase tracking-widest mb-2">Tipo de Falla</p>
           <div className="flex items-center gap-2">
-            <span className="text-xl">{tipoInfo.emoji}</span>
+            <span className="shrink-0">{tipoInfo.icon}</span>
             <span className={`text-[11px] font-bold px-2 py-1 rounded-md ${tipoInfo.badgeClass}`}>
               {tipoInfo.label}
             </span>
@@ -147,7 +154,7 @@ export default function ModalColapso({ colapso, onClose }: ModalColapsoDatosProp
         <div className="bg-slate-800/40 border border-slate-700/50 rounded-md p-2.5">
           <p className="text-[9px] text-slate-400 uppercase tracking-widest mb-1.5">Lugar</p>
           <div className="flex items-center gap-2">
-            <span className="text-base">📍</span>
+            <IconMapPin size={18} className="text-blue-400 shrink-0" />
             <p className="font-mono text-sm font-bold text-blue-300">
               {colapso.lugar}
             </p>

@@ -256,3 +256,34 @@ export function IconPlus({ className = '', size = 16 }: IconProps) {
     </svg>
   );
 }
+
+export function IconFolder({ className = '', size = 20 }: IconProps) {
+  const p = base(size, className);
+  return (
+    <svg {...p}>
+      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+    </svg>
+  );
+}
+
+export function IconCalendar({ className = '', size = 20 }: IconProps) {
+  const p = base(size, className);
+  return (
+    <svg {...p}>
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+    </svg>
+  );
+}
+
+export function IconMapPin({ className = '', size = 20 }: IconProps) {
+  const p = base(size, className);
+  return (
+    <svg {...p}>
+      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+      <circle cx="12" cy="10" r="3" />
+    </svg>
+  );
+}

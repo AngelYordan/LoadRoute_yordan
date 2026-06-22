@@ -5,7 +5,7 @@ import { ejecutarSimulacion } from '@/services/ruteoService';
 import { RutaResponse, SimulacionJob } from '@/types/rutas';
 import {
   IconChart, IconBolt, IconRefresh, IconBuilding, IconPlane, IconPackage,
-  IconClock, IconWarning, IconPlay, IconCheck,
+  IconClock, IconWarning, IconPlay, IconCheck, IconFolder, IconCalendar
 } from '@/components/icons';
 
 interface ControlPanelProps {
@@ -265,7 +265,7 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                  <span>📁</span> Carga de Datos
+                  <IconFolder size={15} /> Carga de Datos
                   <span className="text-slate-600 font-normal normal-case tracking-normal text-[10px] ml-1">(opcional)</span>
                 </h3>
                 <p className="text-[10px] text-slate-500 mt-0.5">
@@ -322,7 +322,7 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
         {esSimulacionPeriodo && (
         <div className="flex flex-col gap-2">
           <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-            <span>📅</span> CONFIGURACIÓN
+            <IconCalendar size={15} /> CONFIGURACIÓN
           </h3>
 
           {/* 🌟 CONDICIONAL: Botones de Periodo solo en Escenario 1 */}
@@ -377,12 +377,12 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
                          [color-scheme:dark] transition-all"
             />
           </div>
-
-          <p className={`text-[10px] flex items-center gap-1.5 px-1 ${fechaInicio ? 'text-emerald-400/80' : 'text-amber-400/80'}`}>
-            {fechaInicio ? <IconClock size={14} className="shrink-0" /> : <IconWarning size={14} className="shrink-0" />}
-            <span>{fechaInicio ? `Duración: ${periodoSeleccionado.dias} días` : 'Selecciona inicio para calcular el periodo'}</span>
-          </p>
-
+          {escenario === 1 && (
+            <p className={`text-[10px] flex items-center gap-1.5 px-1 ${fechaInicio ? 'text-emerald-400/80' : 'text-amber-400/80'}`}>
+              {fechaInicio ? <IconClock size={14} className="shrink-0" /> : <IconWarning size={14} className="shrink-0" />}
+              <span>{fechaInicio ? `Duración: ${periodoSeleccionado.dias} días` : 'Selecciona inicio para calcular el periodo'}</span>
+            </p>
+          )}
         </div>
         )}
       </div>
@@ -404,8 +404,7 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
           </>
         ) : (
           <>
-            <IconPlay size={14} />
-            Ejecutar — Escenario {escenario}
+            Iniciar
           </>
         )}
       </button>
