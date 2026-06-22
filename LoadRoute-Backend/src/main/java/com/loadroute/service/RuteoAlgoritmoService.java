@@ -44,14 +44,8 @@ public class RuteoAlgoritmoService {
         boolean hasColapsado();
 
         String getMensajeColapso();
-
-        default int getSa() {
-            return 1;
-        }
-
-        default int getK() {
-            return 240;
-        }
+        int getSa();
+        int getK();
     }
 
     @FunctionalInterface
@@ -87,21 +81,23 @@ public class RuteoAlgoritmoService {
         }
     }
 
-    public static ParametrosSimulacion obtenerParametrosSimulacion(LocalDateTime inicio, LocalDateTime fin) {
-        if (inicio == null || fin == null) {
-            return new ParametrosSimulacion(3, 240);
+    public static ParametrosSimulacion obtenerParametrosSimulacion(int escenario) {
+        if (escenario == 2) {
+            return new ParametrosSimulacion(1, 1);
         }
-        int sa = 1;
-        int k = 150;
-        return new ParametrosSimulacion(sa, k);
-    }
 
-    private int calcularScMinutos(LocalDateTime inicio, LocalDateTime fin) {
-        return obtenerParametrosSimulacion(inicio, fin).getScMinutos();
+        if (escenario == 3) {
+            return new ParametrosSimulacion(1, 200);
+        }
+
+        if (escenario == 1) {
+            return new ParametrosSimulacion(1, 48);
+        }
+
+        return new ParametrosSimulacion(1, 48);
     }
 
     private static final int MAX_RUTAS_MUESTRA = 10_000;
-    private static final int MINUTOS_LOTE_PERIODO = 5;
 
     public List<RutaResponseDTO> ejecutarRuteo(InputStream aeropuertosIS,
             InputStream vuelosIS,
@@ -155,97 +151,41 @@ public class RuteoAlgoritmoService {
 
         report(progress, 18, "Aeropuertos y vuelos cargados. Leyendo envios...");
 
-        LocalDateTime inicioFiltro = fechaInicio != null ? parsearFechaInicio(fechaInicio) : null;
-        LocalDateTime finFiltro = fechaFin != null ? parsearFechaFin(fechaFin) : null;
-        Map<String, Envio> envios = new LinkedHashMap<>();
-        if (enviosFiles != null && !enviosFiles.isEmpty()
-                && !(enviosFiles.size() == 1 && enviosFiles.get(0).isEmpty())) {
+        LocalDateTime inicioReal = parsearFechaInicio(fechaInicio);
+        LocalDateTime finReal = parsearFechaFin(fechaFin);
+
+        Map<String, Envio> enviosEnMemoria = null;
+
+        if (enviosFiles != null && !enviosFiles.isEmpty() && !(enviosFiles.size() == 1 && enviosFiles.get(0).isEmpty())) {
+            enviosEnMemoria = new LinkedHashMap<>();
+            LocalDateTime inicioFiltro = fechaInicio != null ? inicioReal : null;
+            LocalDateTime finFiltro = (escenario == 2 || escenario == 3) ? null : (fechaFin != null ? finReal : null);
             for (MultipartFile file : enviosFiles) {
                 String filename = file.getOriginalFilename() != null ? file.getOriginalFilename() : "_envios_XXXX_.txt";
-                envios.putAll(Parsers.parsearEnvios(file.getInputStream(), filename, aeropuertos, 0, inicioFiltro,
-                        finFiltro));
+                enviosEnMemoria.putAll(Parsers.parsearEnvios(file.getInputStream(), filename, aeropuertos, 0, inicioFiltro, finFiltro));
             }
-        } else {
-            LocalDateTime inicio = parsearFechaInicio(fechaInicio);
-            LocalDateTime fin = parsearFechaFin(fechaFin);
-            envios = cargaDatosService.obtenerEnviosDeBDComoModelosEnRango(aeropuertos, inicio, fin);
-        }
-
-        report(progress, 30, String.format("Filtro aplicado: %d envios en el rango.", envios.size()));
-        LOG.info(String.format("Datos cargados: %d aeropuertos | %d vuelos | %d envios",
-                aeropuertos.size(), vuelos.size(), envios.size()));
-
-        if (envios.isEmpty()) {
-            LOG.warning("No hay envíos para el rango de fechas especificado.");
-            RutaResponseDTO vacía = new RutaResponseDTO();
-            vacía.setEscenario(escenario);
-            vacía.setTotalEnviosCargados(0);
-            return new SimulacionIterator() {
-                private boolean done = false;
-
-                @Override
-                public boolean hasNext() {
-                    return !done;
-                }
-
-                @Override
-                public RutaResponseDTO nextChunk() {
-                    done = true;
-                    return vacía;
-                }
-
-                @Override
-                public boolean hasColapsado() {
-                    return false;
-                }
-
-                @Override
-                public String getMensajeColapso() {
-                    return "";
-                }
-            };
         }
 
         RedLogistica red = new RedLogistica(aeropuertos.values(), vuelos);
         report(progress, 35, "Red logistica construida.");
 
+        ParametrosSimulacion paramsSim = obtenerParametrosSimulacion(escenario);
+
         RutaResponseDTO response = new RutaResponseDTO();
         response.setEscenario(escenario);
         response.setTotalVuelos(red.getTotalVuelos());
-        response.setTotalEnviosCargados(envios.size());
+        response.setTotalEnviosCargados(0);
         response.setFechaInicio(fechaInicio);
         response.setFechaFin(fechaFin);
         response.setAeropuertos(
                 aeropuertos.values().stream().map(this::mapAeropuertoDTO).collect(Collectors.toList()));
-
-        ParametrosSimulacion paramsSim = obtenerParametrosSimulacion(inicioFiltro, finFiltro);
         response.setSa(paramsSim.getSa());
         response.setK(paramsSim.getK());
 
-        Map<LocalDate, Map<String, Envio>> enviosPorDia = agruparEnviosPorDia(envios);
-        int scMinutos = calcularScMinutos(inicioFiltro, finFiltro);
-        NavigableMap<LocalDateTime, Map<String, Envio>> enviosPorLotePeriodo = agruparEnviosPorLotePeriodo(envios,
-                scMinutos);
+        int scMinutos = paramsSim.getScMinutos();
 
-        LocalDateTime fechaInicioRango = parsearFechaInicio(fechaInicio);
-        LocalDate fechaInicioRangoDia = fechaInicioRango.toLocalDate();
-        // E2/E3: el día 0 de la animación es el primer día con envíos, no 1900-01-01 ni
-        // huecos previos al rango
-        LocalDate fechaBaseDiaria = enviosPorDia.keySet().stream()
-                .min(LocalDate::compareTo)
-                .orElse(fechaInicioRangoDia);
-        report(progress, 98, "Preparando respuesta para el dashboard...");
-        switch (escenario) {
-            case 2:
-                return new Escenario2Iterator(enviosPorDia, aeropuertos.values(), vuelos, response, progress,
-                        fechaBaseDiaria);
-            case 3:
-                return new Escenario3Iterator(enviosPorDia, aeropuertos.values(), vuelos, response, progress,
-                        fechaBaseDiaria);
-            default:
-                return new Escenario1Iterator(enviosPorLotePeriodo, aeropuertos.values(), vuelos, response, progress,
-                        fechaInicioRango, scMinutos);
-        }
+        report(progress, 98, "Preparando iterador para la simulación...");
+        return new SimulacionUnificadaIterator(enviosEnMemoria, aeropuertos, vuelos, response, progress, inicioReal, finReal, scMinutos);
     }
 
     private void report(ProgressReporter progress, int pct, String message) {
@@ -253,13 +193,19 @@ public class RuteoAlgoritmoService {
             progress.update(pct, message);
     }
 
-    private void retirarEnviosProcesados(Map<String, Envio> pendientes, SolucionEstado sol) {
+    // AJUSTE: Agregamos el parámetro escenario para proteger el backlog del Escenario 1
+    private void retirarEnviosProcesados(Map<String, Envio> pendientes, SolucionEstado sol, int escenario) {
         for (String id : sol.getIdsAsignados())
             pendientes.remove(id);
         for (String id : sol.getIdsNoAceptados())
             pendientes.remove(id);
-        for (String id : sol.getEnviosSinRuta())
-            pendientes.remove(id);
+        
+        // Si es Escenario 1, NO removemos los envíos sin ruta. 
+        // Se quedan en el almacén (backlog) para el siguiente lote.
+        if (escenario != 1) {
+            for (String id : sol.getEnviosSinRuta())
+                pendientes.remove(id);
+        }
     }
 
     private List<Vuelo> clonarVuelos(List<Vuelo> originales) {
@@ -267,15 +213,6 @@ public class RuteoAlgoritmoService {
         for (Vuelo v : originales)
             copia.add(v.clonar());
         return copia;
-    }
-
-    private Map<LocalDate, Map<String, Envio>> agruparEnviosPorDia(Map<String, Envio> envios) {
-        Map<LocalDate, Map<String, Envio>> enviosPorDia = new TreeMap<>();
-        for (Envio envio : ordenarEnviosCronologicamente(envios)) {
-            LocalDate dia = envio.getFechaHoraRecepcion().toLocalDate();
-            enviosPorDia.computeIfAbsent(dia, k -> new LinkedHashMap<>()).put(envio.getId(), envio);
-        }
-        return enviosPorDia;
     }
 
     private NavigableMap<LocalDateTime, Map<String, Envio>> agruparEnviosPorLotePeriodo(Map<String, Envio> envios,
@@ -351,7 +288,7 @@ public class RuteoAlgoritmoService {
         }
     }
 
-    // ── ESCENARIO 1: Simulación de Periodo (SA) ──────────────────────────────
+    // ── ITERADOR UNIFICADO (DÍA A DÍA, PERIODO, COLAPSO) ─────────────────────────
     private void addVuelosMaestros(RutaResponseDTO chunk, List<Vuelo> vuelos) {
         chunk.setVuelosMaestros(vuelos.stream().map(v -> {
             RutaResponseDTO.TramoDTO t = new RutaResponseDTO.TramoDTO();
@@ -371,39 +308,58 @@ public class RuteoAlgoritmoService {
         }).collect(Collectors.toList()));
     }
 
-    private class Escenario1Iterator implements SimulacionIterator {
-        private final Iterator<Map.Entry<LocalDateTime, Map<String, Envio>>> iterator;
+    private class SimulacionUnificadaIterator implements SimulacionIterator {
         private final RedLogistica redSA;
         private final Map<String, Envio> pendientesSA = new LinkedHashMap<>();
         private final Map<String, List<SolucionEstado.OccupancyEvent>> reservasSA = new HashMap<>();
         private final RutaResponseDTO baseResponse;
         private final ProgressReporter progress;
         private final LocalDateTime fechaInicioRango;
-        private final int totalLotes;
+        private final LocalDateTime fechaFinRango;
+        private final LocalDate fechaInicioRangoDia;
         private final int scMinutos;
         private final List<Vuelo> vuelosOriginales;
+
+        private final Map<String, Envio> enviosEnMemoria;
+        private final Map<String, Aeropuerto> aeropuertosMap;
+
+        private LocalDateTime currentLoteInicio;
         private int loteCount = 0;
         private boolean colapsado = false;
         private String mensajeColapso = "";
         private boolean isFirst = true;
+        private long totalMinutosSimulacion;
+        private int enviosAcumuladosTotales = 0;
 
-        public Escenario1Iterator(NavigableMap<LocalDateTime, Map<String, Envio>> enviosPorLote,
-                Collection<Aeropuerto> aeropuertos, List<Vuelo> vuelos,
-                RutaResponseDTO baseResponse, ProgressReporter progress,
-                LocalDateTime fechaInicioRango, int scMinutos) {
-            this.iterator = enviosPorLote.entrySet().iterator();
+        public SimulacionUnificadaIterator(Map<String, Envio> enviosEnMemoria, Map<String, Aeropuerto> aeropuertosMap,
+                List<Vuelo> vuelos, RutaResponseDTO baseResponse, ProgressReporter progress,
+                LocalDateTime fechaInicioRango, LocalDateTime fechaFinRango, int scMinutos) {
+            this.enviosEnMemoria = enviosEnMemoria;
+            this.aeropuertosMap = aeropuertosMap;
             this.vuelosOriginales = vuelos;
-            this.redSA = new RedLogistica(aeropuertos, clonarVuelos(vuelos));
+            this.redSA = new RedLogistica(aeropuertosMap.values(), clonarVuelos(vuelos));
             this.baseResponse = baseResponse;
             this.progress = progress;
             this.fechaInicioRango = fechaInicioRango;
-            this.totalLotes = Math.max(1, enviosPorLote.size());
+            this.fechaFinRango = fechaFinRango;
+            this.fechaInicioRangoDia = fechaInicioRango.toLocalDate();
             this.scMinutos = scMinutos;
+            this.currentLoteInicio = fechaInicioRango;
+
+            if (fechaInicioRango != null && fechaFinRango != null) {
+                this.totalMinutosSimulacion = Math.max(1, ChronoUnit.MINUTES.between(fechaInicioRango, fechaFinRango));
+            } else {
+                this.totalMinutosSimulacion = 1440;
+            }
         }
 
         @Override
         public boolean hasNext() {
-            return iterator.hasNext() && !colapsado;
+            if (colapsado) return false;
+            if (baseResponse.getEscenario() == 1) {
+                return currentLoteInicio.isBefore(fechaFinRango);
+            }
+            return true;
         }
 
         @Override
@@ -418,49 +374,77 @@ public class RuteoAlgoritmoService {
 
         @Override
         public RutaResponseDTO nextChunk() {
-            if (!hasNext())
-                return null;
-            Map.Entry<LocalDateTime, Map<String, Envio>> entry = iterator.next();
-            LocalDateTime loteInicio = entry.getKey();
-            LocalDateTime loteFin = loteInicio.plusMinutes(scMinutos);
-            pendientesSA.putAll(entry.getValue());
+            if (!hasNext()) return null;
+            LocalDateTime loteFin = currentLoteInicio.plusMinutes(scMinutos);
+            
+            Map<String, Envio> nuevosEnvios = new LinkedHashMap<>();
+            if (baseResponse.getEscenario() != 2) {
+                if (enviosEnMemoria != null) {
+                    for (Envio e : enviosEnMemoria.values()) {
+                        LocalDateTime rec = e.getFechaHoraRecepcion();
+                        if (!rec.isBefore(currentLoteInicio) && rec.isBefore(loteFin)) {
+                            nuevosEnvios.put(e.getId(), e);
+                        }
+                    }
+                } else {
+                    nuevosEnvios = cargaDatosService.obtenerEnviosDeBDComoModelosEnRango(
+                        aeropuertosMap, currentLoteInicio, loteFin.minusSeconds(1));
+                }
+            }
+            
+            pendientesSA.putAll(nuevosEnvios);
+            enviosAcumuladosTotales += nuevosEnvios.size();
             loteCount++;
-            int diaOffset = (int) ChronoUnit.DAYS.between(fechaInicioRango.toLocalDate(), loteInicio.toLocalDate());
 
-            RutaResponseDTO chunk = clonarBaseResponse(baseResponse, loteInicio, loteFin);
-            chunk.setTotalEnviosCargados(pendientesSA.size());
+            RutaResponseDTO chunk = clonarBaseResponse(baseResponse, currentLoteInicio, loteFin);
+            chunk.setTotalEnviosCargados(enviosAcumuladosTotales);
 
             SimulatedAnnealing sa = new SimulatedAnnealing(redSA)
-                    .setTemperaturaInicial(10_000)
+                    .setTemperaturaInicial(1_000.0)
                     .setTemperaturaMinima(1.0)
                     .setTiempoPlanificacion(loteFin)
-                    .setPeriodoString(formatoLote(loteInicio, loteFin))
-                    .setTiempoMaxMs((long) (getSa() * 60_000 * 0.9));
-            report(progress, 35 + (60 * loteCount / totalLotes), "SA lote: " + formatoLote(loteInicio, loteFin));
+                    .setPeriodoString(formatoLote(currentLoteInicio, loteFin));
+            
+            int pct = 35;
+            if (baseResponse.getEscenario() == 1) {
+                long minsPassed = ChronoUnit.MINUTES.between(fechaInicioRango, currentLoteInicio);
+                pct = 35 + (int) ((60.0 * minsPassed) / totalMinutosSimulacion);
+                pct = Math.min(95, Math.max(35, pct));
+            }
+            report(progress, pct, "SA lote: " + formatoLote(currentLoteInicio, loteFin));
+            
             long t0 = System.currentTimeMillis();
             SolucionEstado solSA = sa.optimizar(pendientesSA);
             long msSA = System.currentTimeMillis() - t0;
 
-            chunk.setResultadoSA(buildResultado("SA (Periodo)", sa.getCostoInicial(), sa.getCostoFinal(),
-                    sa.getMejoraRelativa(), sa.getIteraciones(), msSA, solSA, pendientesSA,
-                    Collections.emptyList(), reservasSA, loteFin, fechaInicioRango.toLocalDate()));
+            String nombreAlgoritmo;
+            if (baseResponse.getEscenario() == 3) nombreAlgoritmo = "SA (Colapso)";
+            else if (baseResponse.getEscenario() == 2) nombreAlgoritmo = "SA (Día a Día)";
+            else nombreAlgoritmo = "SA (Periodo)";
 
-            if (!solSA.getEnviosSinRuta().isEmpty()) {
+            chunk.setResultadoSA(buildResultado(nombreAlgoritmo, sa.getCostoInicial(), sa.getCostoFinal(),
+                    sa.getMejoraRelativa(), sa.getIteraciones(), msSA, solSA, pendientesSA,
+                    Collections.emptyList(), reservasSA, loteFin, fechaInicioRangoDia));
+
+            // AJUSTE: Solo colapsamos en Escenario 3 (El Escenario 1 continúa operando aunque haya varados)
+            if (!solSA.getEnviosSinRuta().isEmpty() && baseResponse.getEscenario() == 3) {
                 colapsado = true;
                 mensajeColapso = "Algoritmo colapso: " + solSA.getEnviosSinRuta().size()
                         + " envios varados o SLA incumplido.";
                 chunk.getResultadoSA().setMensajeColapso(mensajeColapso);
             }
 
-            retirarEnviosProcesados(pendientesSA, solSA);
+            // AJUSTE: Pasamos el escenario para que retireEnviosProcesados pueda proteger el backlog del esc. 1
+            retirarEnviosProcesados(pendientesSA, solSA, baseResponse.getEscenario());
 
             if (isFirst) {
                 addVuelosMaestros(chunk, vuelosOriginales);
                 isFirst = false;
             }
 
-            if (progress != null)
-                progress.onChunk(chunk);
+            currentLoteInicio = loteFin;
+
+            if (progress != null) progress.onChunk(chunk);
             return chunk;
         }
 
@@ -475,225 +459,7 @@ public class RuteoAlgoritmoService {
         }
     }
 
-    // ── ESCENARIO 2: Operación Día a Día (SA) ────────────────────────────────
-    private class Escenario2Iterator implements SimulacionIterator {
-        private final Iterator<Map.Entry<LocalDate, Map<String, Envio>>> iterator;
-        private final List<Vuelo> vuelosSA;
-        private final List<Vuelo> disponiblesSA;
-        private final Set<Integer> canceladosAcumulados = new HashSet<>();
-        private final Map<String, Envio> pendientesSA = new LinkedHashMap<>();
-        private final Map<String, List<SolucionEstado.OccupancyEvent>> reservasSA = new HashMap<>();
-        private final Collection<Aeropuerto> aeropuertos;
-        private final List<Vuelo> vuelosOriginales;
-        private final RutaResponseDTO baseResponse;
-        private final ProgressReporter progress;
-        private final LocalDate fechaInicioRango;
-        private final int totalDias;
-        private int diaCount = 0;
-        private boolean isFirst = true;
 
-        public Escenario2Iterator(Map<LocalDate, Map<String, Envio>> enviosPorDia,
-                Collection<Aeropuerto> aeropuertos, List<Vuelo> vuelos,
-                RutaResponseDTO baseResponse, ProgressReporter progress,
-                LocalDate fechaInicioRango) {
-            this.iterator = enviosPorDia.entrySet().iterator();
-            this.vuelosOriginales = vuelos;
-            this.vuelosSA = clonarVuelos(vuelos);
-            this.disponiblesSA = new ArrayList<>(this.vuelosSA);
-            Collections.shuffle(this.disponiblesSA, new Random(123));
-            this.aeropuertos = aeropuertos;
-            this.baseResponse = baseResponse;
-            this.progress = progress;
-            this.fechaInicioRango = fechaInicioRango;
-            this.totalDias = enviosPorDia.size();
-        }
-
-        @Override
-        public boolean hasNext() {
-            return iterator.hasNext();
-        }
-
-        @Override
-        public boolean hasColapsado() {
-            return false;
-        }
-
-        @Override
-        public String getMensajeColapso() {
-            return "";
-        }
-
-        @Override
-        public RutaResponseDTO nextChunk() {
-            if (!hasNext())
-                return null;
-            Map.Entry<LocalDate, Map<String, Envio>> entry = iterator.next();
-            LocalDate dia = entry.getKey();
-            pendientesSA.putAll(entry.getValue());
-            diaCount++;
-            int diaOffset = (int) fechaInicioRango.until(dia, ChronoUnit.DAYS);
-            int cancelar = Math.max(1, (int) (vuelosOriginales.size() * 0.01));
-            for (int i = 0; i < cancelar && !disponiblesSA.isEmpty(); i++) {
-                Vuelo vsa = disponiblesSA.remove(0);
-                vsa.setCapacidadMax(0);
-                canceladosAcumulados.add(vsa.getId());
-            }
-            SimulatedAnnealing sa = new SimulatedAnnealing(new RedLogistica(aeropuertos, vuelosSA))
-                    .setTemperaturaInicial(1_000)
-                    .setTemperaturaMinima(0.1)
-                    .setTiempoPlanificacion(dia.atTime(23, 59, 59))
-                    .setPeriodoString(dia.toString())
-                    .setTiempoMaxMs((long) (getSa() * 60_000 * 0.9));
-            report(progress, 35 + (60 * diaCount / totalDias), "E2-SA dia: " + dia);
-            long t0 = System.currentTimeMillis();
-            SolucionEstado solSA = sa.optimizar(pendientesSA);
-            long msSA = System.currentTimeMillis() - t0;
-
-            RutaResponseDTO chunk = clonarBaseResponse(baseResponse, dia);
-            chunk.setTotalEnviosCargados(pendientesSA.size());
-            chunk.setResultadoSA(buildResultado("SA (Dia a Dia)", sa.getCostoInicial(), sa.getCostoFinal(),
-                    sa.getMejoraRelativa(), sa.getIteraciones(), msSA, solSA, pendientesSA,
-                    new ArrayList<>(canceladosAcumulados), reservasSA, dia.atTime(23, 59, 59), fechaInicioRango));
-
-            if (isFirst) {
-                addVuelosMaestros(chunk, vuelosOriginales);
-                isFirst = false;
-            }
-            if (progress != null)
-                progress.onChunk(chunk);
-            retirarEnviosProcesados(pendientesSA, solSA);
-            return chunk;
-        }
-
-        @Override
-        public int getSa() {
-            return baseResponse.getSa();
-        }
-
-        @Override
-        public int getK() {
-            return baseResponse.getK();
-        }
-    }
-
-    // ── ESCENARIO 3: Colapso Progresivo (SA) ─────────────────────────────────
-    private class Escenario3Iterator implements SimulacionIterator {
-        private final Iterator<Map.Entry<LocalDate, Map<String, Envio>>> iterator;
-        private final List<Vuelo> vuelosSA;
-        private final List<Vuelo> restantesSA;
-        private final Set<Integer> canceladosSA = new HashSet<>();
-        private final Map<String, Envio> pendientesSA = new LinkedHashMap<>();
-        private final Map<String, List<SolucionEstado.OccupancyEvent>> reservasSA = new HashMap<>();
-        private final Collection<Aeropuerto> aeropuertos;
-        private final List<Vuelo> vuelosOriginales;
-        private final RutaResponseDTO baseResponse;
-        private final ProgressReporter progress;
-        private final LocalDate fechaInicioRango;
-        private final int totalDias;
-        private int diaCount = 0;
-        private int canceladosTotal = 0;
-        private boolean colapsado = false;
-        private String mensajeColapso = "";
-        private boolean isFirst = true;
-
-        public Escenario3Iterator(Map<LocalDate, Map<String, Envio>> enviosPorDia,
-                Collection<Aeropuerto> aeropuertos, List<Vuelo> vuelos,
-                RutaResponseDTO baseResponse, ProgressReporter progress,
-                LocalDate fechaInicioRango) {
-            this.iterator = enviosPorDia.entrySet().iterator();
-            this.vuelosOriginales = vuelos;
-            this.vuelosSA = clonarVuelos(vuelos);
-            this.restantesSA = new ArrayList<>(this.vuelosSA);
-            Collections.shuffle(this.restantesSA, new Random(42));
-            this.aeropuertos = aeropuertos;
-            this.baseResponse = baseResponse;
-            this.progress = progress;
-            this.fechaInicioRango = fechaInicioRango;
-            this.totalDias = enviosPorDia.size();
-        }
-
-        @Override
-        public boolean hasNext() {
-            return iterator.hasNext();
-        }
-
-        @Override
-        public boolean hasColapsado() {
-            return colapsado;
-        }
-
-        @Override
-        public String getMensajeColapso() {
-            return mensajeColapso;
-        }
-
-        @Override
-        public RutaResponseDTO nextChunk() {
-            if (!hasNext())
-                return null;
-            Map.Entry<LocalDate, Map<String, Envio>> entry = iterator.next();
-            LocalDate dia = entry.getKey();
-            pendientesSA.putAll(entry.getValue());
-            diaCount++;
-            int diaOffset = (int) fechaInicioRango.until(dia, ChronoUnit.DAYS);
-            if (!colapsado) {
-                int n = Math.max(1, (int) (vuelosOriginales.size() * 0.05));
-                for (int i = 0; i < n && !restantesSA.isEmpty(); i++) {
-                    Vuelo vsa = restantesSA.remove(0);
-                    vsa.setCapacidadMax(0);
-                    canceladosSA.add(vsa.getId());
-                    canceladosTotal++;
-                }
-            }
-            SimulatedAnnealing sa = new SimulatedAnnealing(new RedLogistica(aeropuertos, vuelosSA))
-                    .setTemperaturaInicial(1_000)
-                    .setTemperaturaMinima(0.5)
-                    .setTiempoPlanificacion(dia.atTime(23, 59, 59))
-                    .setPeriodoString(dia.toString())
-                    .setTiempoMaxMs((long) (getSa() * 60_000 * 0.9));
-            report(progress, 35 + (60 * diaCount / totalDias), "E3-SA dia: " + dia);
-            long t0 = System.currentTimeMillis();
-            SolucionEstado solSA = sa.optimizar(pendientesSA);
-            long msSA = System.currentTimeMillis() - t0;
-
-            int huerfanos = solSA.getEnviosSinRuta().size();
-            double proporcion = (double) huerfanos / Math.max(1, pendientesSA.size());
-            if (proporcion > 0.10 && !colapsado) {
-                colapsado = true;
-                int pctFlota = (int) ((double) canceladosTotal / vuelosOriginales.size() * 100);
-                int pctHuerfa = (int) (proporcion * 100);
-                mensajeColapso = String.format("COLAPSO: %d envios varados (%d%%) tras perder %d%% flota.",
-                        huerfanos, pctHuerfa, pctFlota);
-            }
-
-            RutaResponseDTO chunk = clonarBaseResponse(baseResponse, dia);
-            chunk.setTotalEnviosCargados(pendientesSA.size());
-            ResultadoAlgoritmo resSA = buildResultado("SA (Colapso)", sa.getCostoInicial(), sa.getCostoFinal(),
-                    sa.getMejoraRelativa(), sa.getIteraciones(), msSA, solSA, pendientesSA,
-                    new ArrayList<>(canceladosSA), reservasSA, dia.atTime(23, 59, 59), fechaInicioRango);
-            resSA.setMensajeColapso(mensajeColapso);
-            chunk.setResultadoSA(resSA);
-
-            if (isFirst) {
-                addVuelosMaestros(chunk, vuelosOriginales);
-                isFirst = false;
-            }
-            if (progress != null)
-                progress.onChunk(chunk);
-            retirarEnviosProcesados(pendientesSA, solSA);
-            return chunk;
-        }
-
-        @Override
-        public int getSa() {
-            return baseResponse.getSa();
-        }
-
-        @Override
-        public int getK() {
-            return baseResponse.getK();
-        }
-    }
 
     // ── MAPEO A DTO ───────────────────────────────────────────────────────────
     private ResultadoAlgoritmo buildResultado(String nombre,
