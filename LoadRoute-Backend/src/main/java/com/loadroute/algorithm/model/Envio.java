@@ -38,7 +38,7 @@ public class Envio {
     // ── Métodos de negocio ───────────────────────────────────────────────────
 
     public LocalDateTime getRecepcionGMT() {
-        return fechaHoraRecepcion.minusHours(origen.getGmt());
+        return fechaHoraRecepcion;
     }
 
     public int getSlaHoras() {

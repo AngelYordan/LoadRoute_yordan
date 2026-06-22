@@ -92,7 +92,7 @@ public class RuteoAlgoritmoService {
             return new ParametrosSimulacion(3, 240);
         }
         int sa = 1;
-        int k = 200;
+        int k = 150;
         return new ParametrosSimulacion(sa, k);
     }
 
@@ -431,7 +431,7 @@ public class RuteoAlgoritmoService {
             chunk.setTotalEnviosCargados(pendientesSA.size());
 
             SimulatedAnnealing sa = new SimulatedAnnealing(redSA)
-                    .setTemperaturaInicial(1_000.0)
+                    .setTemperaturaInicial(10_000)
                     .setTemperaturaMinima(1.0)
                     .setTiempoPlanificacion(loteFin)
                     .setPeriodoString(formatoLote(loteInicio, loteFin))
@@ -539,7 +539,7 @@ public class RuteoAlgoritmoService {
                 canceladosAcumulados.add(vsa.getId());
             }
             SimulatedAnnealing sa = new SimulatedAnnealing(new RedLogistica(aeropuertos, vuelosSA))
-                    .setTemperaturaInicial(1_000.0)
+                    .setTemperaturaInicial(1_000)
                     .setTemperaturaMinima(0.1)
                     .setTiempoPlanificacion(dia.atTime(23, 59, 59))
                     .setPeriodoString(dia.toString())
@@ -646,7 +646,7 @@ public class RuteoAlgoritmoService {
                 }
             }
             SimulatedAnnealing sa = new SimulatedAnnealing(new RedLogistica(aeropuertos, vuelosSA))
-                    .setTemperaturaInicial(800.0)
+                    .setTemperaturaInicial(1_000)
                     .setTemperaturaMinima(0.5)
                     .setTiempoPlanificacion(dia.atTime(23, 59, 59))
                     .setPeriodoString(dia.toString())

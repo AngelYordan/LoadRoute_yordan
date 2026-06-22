@@ -191,19 +191,10 @@ public class SimulatedAnnealing {
         return mejorSolucion;
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // OPERADORES DE VECINDARIO
-    // ══════════════════════════════════════════════════════════════════════════
-
-    /**
-     * Operador 1: cambiar la ruta de un envío aleatorio.
-     * Aplica el movimiento directamente y retorna el delta.
-     * Si no hay movimiento válido, retorna Double.MAX_VALUE.
-     */
     private double intentarCambioRuta(EstadoIncremental estado,
             Map<String, Envio> envios,
             Map<String, List<List<Vuelo>>> cache) {
-        String idEnvio = estado.seleccionarEnvioAleatorio(rng);
+        String idEnvio = estado.seleccionarEnvioConPreferenciaDeProblema(rng);
         if (idEnvio == null)
             return Double.MAX_VALUE;
 
@@ -213,7 +204,10 @@ public class SimulatedAnnealing {
         String cacheKey = envio.getOrigen().getCodigo() + "->" + envio.getDestino().getCodigo();
         List<List<Vuelo>> alternativas = cache.get(cacheKey);
         if (alternativas == null) {
-            alternativas = red.buscarRutasRelajadas(envio, tiempoPlanificacion);
+            List<List<Vuelo>> rutasEncontradas = red.buscarRutasRelajadas(envio, tiempoPlanificacion);
+            // Hacer una lista mutable y agregar la opción de desasignar (ruta vacía)
+            alternativas = new ArrayList<>(rutasEncontradas);
+            alternativas.add(Collections.emptyList());
             cache.put(cacheKey, alternativas);
         } else {
             cacheHits++;
@@ -234,15 +228,13 @@ public class SimulatedAnnealing {
      * Aplica el movimiento directamente y retorna el delta.
      */
     private double intentarSwapRutas(EstadoIncremental estado, Map<String, Envio> envios) {
-        // Seleccionar un envío semilla
-        String idA = estado.seleccionarEnvioAleatorio(rng);
+        // Seleccionar un envío semilla usando la selección heurística de problemas
+        String idA = estado.seleccionarEnvioConPreferenciaDeProblema(rng);
         if (idA == null)
             return Double.MAX_VALUE;
 
         Envio envioA = envios.get(idA);
         List<Vuelo> rutaA = estado.getRuta(idA);
-        if (rutaA.isEmpty())
-            return Double.MAX_VALUE;
 
         // Buscar un segundo envío con el mismo origen y destino
         String idB = estado.seleccionarEnvioMismoParOD(rng, idA, envioA, envios);
@@ -252,7 +244,9 @@ public class SimulatedAnnealing {
         Envio envioB = envios.get(idB);
         List<Vuelo> rutaB = estado.getRuta(idB);
 
-        // Si ambos tienen la misma ruta, el swap no cambia nada
+        // Si ambos están vacíos o tienen la misma ruta, el swap no cambia nada
+        if (rutaA.isEmpty() && rutaB.isEmpty())
+            return Double.MAX_VALUE;
         if (iguales(rutaA, rutaB))
             return Double.MAX_VALUE;
 
@@ -272,8 +266,7 @@ public class SimulatedAnnealing {
         final Map<String, List<Vuelo>> asignaciones;
         final Map<String, Long> transitoHoras;
         final Map<Integer, Integer> cargaPorVuelo;
-        final ArrayList<String> enviosConRuta;
-        final Map<String, Integer> indiceConRuta;
+        final List<String> todosLosIds;
         double costoTotal;
 
         // Para revertir el último movimiento [OPT-2]
@@ -286,8 +279,7 @@ public class SimulatedAnnealing {
             this.asignaciones = new LinkedHashMap<>();
             this.transitoHoras = new HashMap<>();
             this.cargaPorVuelo = new HashMap<>();
-            this.enviosConRuta = new ArrayList<>();
-            this.indiceConRuta = new HashMap<>();
+            this.todosLosIds = new ArrayList<>(envios.keySet());
 
             for (Map.Entry<String, List<Vuelo>> e : sol.getAsignaciones().entrySet()) {
                 String id = e.getKey();
@@ -295,8 +287,6 @@ public class SimulatedAnnealing {
                 asignaciones.put(id, ruta);
 
                 if (!ruta.isEmpty()) {
-                    indiceConRuta.put(id, enviosConRuta.size());
-                    enviosConRuta.add(id);
                     Envio envio = envios.get(id);
                     if (envio != null) {
                         transitoHoras.put(id, calcularTransitoHoras(ruta, envio));
@@ -313,15 +303,31 @@ public class SimulatedAnnealing {
 
         double calcularDeltaCambioRuta(String idEnvio, List<Vuelo> rutaVieja,
                 List<Vuelo> rutaNueva, Envio envio) {
-            long horasViejas = transitoHoras.getOrDefault(idEnvio, 0L);
-            long horasNuevas = calcularTransitoHoras(rutaNueva, envio);
+            double delta = 0.0;
             int maletas = envio.getCantidadMaletas();
             int sla = envio.getSlaHoras();
 
-            double delta = (horasNuevas - horasViejas);
-            delta += SolucionEstado.PESO_SLA * (Math.max(0, horasNuevas - sla)
-                    - Math.max(0, horasViejas - sla));
+            // Costo de la ruta vieja
+            double costoViejo = 0.0;
+            if (rutaVieja.isEmpty()) {
+                costoViejo = SolucionEstado.PESO_SLA * sla;
+            } else {
+                long horasViejas = transitoHoras.getOrDefault(idEnvio, 0L);
+                costoViejo = horasViejas + SolucionEstado.PESO_SLA * Math.max(0, horasViejas - sla);
+            }
 
+            // Costo de la ruta nueva
+            double costoNuevo = 0.0;
+            if (rutaNueva.isEmpty()) {
+                costoNuevo = SolucionEstado.PESO_SLA * sla;
+            } else {
+                long horasNuevas = calcularTransitoHoras(rutaNueva, envio);
+                costoNuevo = horasNuevas + SolucionEstado.PESO_SLA * Math.max(0, horasNuevas - sla);
+            }
+
+            delta += (costoNuevo - costoViejo);
+
+            // Capacidad de los vuelos (impacto en la capacidad)
             for (Vuelo v : rutaVieja) {
                 int c = cargaPorVuelo.getOrDefault(v.getId(), 0);
                 delta += SolucionEstado.PESO_CAPACIDAD_VUELO
@@ -354,7 +360,12 @@ public class SimulatedAnnealing {
                 cargaPorVuelo.merge(v.getId(), -maletas, Integer::sum);
             for (Vuelo v : rutaNueva)
                 cargaPorVuelo.merge(v.getId(), maletas, Integer::sum);
-            transitoHoras.put(idEnvio, calcularTransitoHoras(rutaNueva, envio));
+            
+            if (rutaNueva.isEmpty()) {
+                transitoHoras.remove(idEnvio);
+            } else {
+                transitoHoras.put(idEnvio, calcularTransitoHoras(rutaNueva, envio));
+            }
             asignaciones.put(idEnvio, rutaNueva);
             costoTotal += delta;
         }
@@ -404,9 +415,33 @@ public class SimulatedAnnealing {
         // ── Selección ─────────────────────────────────────────────────────────
 
         String seleccionarEnvioAleatorio(Random rng) {
-            if (enviosConRuta.isEmpty())
+            if (todosLosIds.isEmpty())
                 return null;
-            return enviosConRuta.get(rng.nextInt(enviosConRuta.size()));
+            return todosLosIds.get(rng.nextInt(todosLosIds.size()));
+        }
+
+        String seleccionarEnvioConPreferenciaDeProblema(Random rng) {
+            if (todosLosIds.isEmpty())
+                return null;
+
+            // Muestreo tipo Torneo (hasta 5 intentos) para priorizar envíos varados o con problemas de SLA
+            for (int intento = 0; intento < 5; intento++) {
+                String id = todosLosIds.get(rng.nextInt(todosLosIds.size()));
+                Envio envio = envios.get(id);
+                if (envio != null) {
+                    List<Vuelo> ruta = asignaciones.get(id);
+                    if (ruta == null || ruta.isEmpty()) {
+                        return id; // Sin asignar es un problema a resolver
+                    }
+                    long transit = transitoHoras.getOrDefault(id, 0L);
+                    if (transit > envio.getSlaHoras()) {
+                        return id; // Violación de SLA es un problema a resolver
+                    }
+                }
+            }
+
+            // Si el muestreo no encuentra problemas, retorna cualquier envío aleatorio uniformemente
+            return todosLosIds.get(rng.nextInt(todosLosIds.size()));
         }
 
         /** Selecciona un segundo envío con el mismo par origen-destino que idA. */
@@ -416,7 +451,7 @@ public class SimulatedAnnealing {
             String dest = envioA.getDestino().getCodigo();
 
             List<String> candidatos = new ArrayList<>();
-            for (String id : enviosConRuta) {
+            for (String id : todosLosIds) {
                 if (id.equals(idA))
                     continue;
                 Envio e = todosEnvios.get(id);
@@ -494,7 +529,7 @@ public class SimulatedAnnealing {
         List<Double> deltasPositivos = new ArrayList<>();
         Map<String, List<List<Vuelo>>> cacheTemp = new HashMap<>();
 
-        for (int i = 0; i < 100 && !estado.enviosConRuta.isEmpty(); i++) {
+        for (int i = 0; i < 100 && !estado.todosLosIds.isEmpty(); i++) {
             String id = estado.seleccionarEnvioAleatorio(rng);
             if (id == null)
                 continue;
