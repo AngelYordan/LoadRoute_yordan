@@ -71,6 +71,8 @@ interface DashboardViewProps {
   handleStop: () => void;
   handleTabClick: (tabId: TabId) => void;
   handleSelectVuelo: (vuelo: any) => void;
+  handleSelectAeropuerto: (aeropuerto: any) => void;
+  handleSelectEnvio: (envio: any) => void;
   getPanelWidth: (tab: TabId | null) => string;
   setActiveTab: (tab: TabId | null) => void;
   setEnvioModal: (modal: any) => void;
@@ -118,6 +120,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   handleStop,
   handleTabClick,
   handleSelectVuelo,
+  handleSelectAeropuerto,
+  handleSelectEnvio,
   getPanelWidth,
   setActiveTab,
   setEnvioModal,
@@ -311,6 +315,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             resultado={resultado}
             simTiempoMinutos={simTotalVisual}
             onSelectVuelo={handleSelectVuelo}
+            onSelectAeropuerto={handleSelectAeropuerto}
             selectedVuelo={vueloModal}
             umbralVerde={umbralVerde}
             umbralAmbar={umbralAmbar}
@@ -379,8 +384,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     activeTab={activeTab}
                     simTiempoMinutos={simTotalVisual}
                     cargasAeropuertoOverride={cargasAeropuertoFinales}
-                    onSelectEnvio={setEnvioModal}
-                    onSelectAeropuerto={setAeroModal}
+                    onSelectEnvio={handleSelectEnvio}
+                    onSelectAeropuerto={handleSelectAeropuerto}
                   />
                 )}
                 {activeTab === 'simulacion' && (
@@ -450,6 +455,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <ModalVuelo
         vuelo={vueloModal}
         rutasActivas={rutasActivas}
+        onSelectEnvio={handleSelectEnvio}
         onClose={() => setVueloModal(null)}
       />
       <ModalColapso
