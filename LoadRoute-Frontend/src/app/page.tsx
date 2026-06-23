@@ -351,14 +351,34 @@ export default function Home() {
   const handleTabClick = useCallback((id: TabId) => {
     setActiveTab(prev => {
       const next = prev === id ? null : id;
-      if (next) setVueloModal(null);
+      if (next) {
+        setVueloModal(null);
+        setAeroModal(null);
+        setEnvioModal(null);
+      }
       return next;
     });
   }, []);
 
   const handleSelectVuelo = useCallback((vuelo: TramoDTO) => {
     setActiveTab(null);
+    setAeroModal(null);
+    setEnvioModal(null);
     setVueloModal(vuelo);
+  }, []);
+
+  const handleSelectAeropuerto = useCallback((aeropuerto: AeropuertoDTO) => {
+    setActiveTab(null);
+    setVueloModal(null);
+    setEnvioModal(null);
+    setAeroModal(aeropuerto);
+  }, []);
+
+  const handleSelectEnvio = useCallback((envio: RutaMuestra) => {
+    setActiveTab(null);
+    setVueloModal(null);
+    setAeroModal(null);
+    setEnvioModal(envio);
   }, []);
 
   // ── Clamp umbral verde para que no supere ámbar
@@ -471,6 +491,8 @@ export default function Home() {
       handleStop={handleStop}
       handleTabClick={handleTabClick}
       handleSelectVuelo={handleSelectVuelo}
+      handleSelectAeropuerto={handleSelectAeropuerto}
+      handleSelectEnvio={handleSelectEnvio}
       getPanelWidth={getPanelWidth}
       setActiveTab={setActiveTab}
       setEnvioModal={setEnvioModal}

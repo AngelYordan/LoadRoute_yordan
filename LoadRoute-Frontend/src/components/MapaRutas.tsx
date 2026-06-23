@@ -29,6 +29,7 @@ interface MapaRutasProps {
   simTiempoMinutos: number;
   cargasAeropuertoOverride?: Record<string, number> | null;
   onSelectVuelo: (vuelo: any) => void;
+  onSelectAeropuerto: (aeropuerto: AeropuertoDTO) => void;
   selectedVuelo?: any | null;  // tramo seleccionado — dibuja solo su polilínea
   umbralVerde: number;
   umbralAmbar: number;
@@ -110,65 +111,28 @@ function crearIconoAeropuerto(collapsed: boolean): L.DivIcon {
   });
 }
 
-type StatsAeropuerto = { salidas: number; llegadas: number; enTransito: number; };
-
-function calcularStatsAeropuertos(rutas: RutaMuestra[]): Record<string, StatsAeropuerto> {
-  const stats: Record<string, StatsAeropuerto> = {};
-  const get = (c: string) => stats[c] ?? (stats[c] = { salidas: 0, llegadas: 0, enTransito: 0 });
-  for (const ruta of rutas) {
-    if (!ruta.tramos || ruta.tramos.length === 0) continue;
-    get(ruta.origen).salidas++;
-    get(ruta.destino ?? ruta.tramos[ruta.tramos.length - 1]?.destino).llegadas++;
-    for (let i = 1; i < ruta.tramos.length - 1; i++) {
-      get(ruta.tramos[i].destino).enTransito++;
-    }
-  }
-  return stats;
-}
-
 const AirportMarker: React.FC<{
   aeropuerto: AeropuertoDTO;
   cargaActual: number;
-  stats?: StatsAeropuerto;
+  onSelectAeropuerto: (aeropuerto: AeropuertoDTO) => void;
 }> = React.memo(function AirportMarker({
   aeropuerto,
   cargaActual,
-  stats,
+  onSelectAeropuerto,
 }) {
-  const pct = aeropuerto.capacidadMax > 0
-    ? Math.round((cargaActual / aeropuerto.capacidadMax) * 100)
-    : 0;
   const collapsed = isAirportCollapsed(cargaActual, aeropuerto.capacidadMax);
   const icon = useMemo(() => crearIconoAeropuerto(collapsed), [collapsed]);
+  const eventHandlers = useMemo(
+    () => ({ click: () => onSelectAeropuerto(aeropuerto) }),
+    [aeropuerto, onSelectAeropuerto]
+  );
 
   return (
     <Marker
       position={[aeropuerto.latitud, aeropuerto.longitud]}
       icon={icon}
-    >
-      <Tooltip direction="top" offset={[0, -8]} className="airport-tooltip">
-        <div style={{ fontSize: '11px', lineHeight: 1.5, minWidth: '160px' }}>
-          <strong style={{ fontSize: '13px' }}>{aeropuerto.codigo}</strong>
-          <span style={{ color: '#94a3b8', marginLeft: '4px' }}>{aeropuerto.ciudad}</span>
-          {collapsed && (
-            <span style={{ marginLeft: '6px', color: '#ef4444', fontWeight: 700, fontSize: '11px' }}>COLAPSO</span>
-          )}
-          <br/>
-          <span style={{ color: '#64748b' }}>{aeropuerto.pais} | GMT{aeropuerto.gmt >= 0 ? '+' : ''}{aeropuerto.gmt}</span>
-          <hr style={{ borderColor: '#334155', margin: '4px 0' }} />
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-            <span>Carga: <strong style={{ color: collapsed ? '#ef4444' : 'inherit' }}>{cargaActual}</strong>/{aeropuerto.capacidadMax} ({pct}%)</span>
-          </div>
-          {stats && (
-            <div style={{ marginTop: '4px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              {stats.salidas > 0 && <span style={{ color: '#4ade80' }}>↑ {stats.salidas} salen</span>}
-              {stats.llegadas > 0 && <span style={{ color: '#60a5fa' }}>↓ {stats.llegadas} llegan</span>}
-              {stats.enTransito > 0 && <span style={{ color: '#f59e0b' }}>⟷ {stats.enTransito} tránsito</span>}
-            </div>
-          )}
-        </div>
-      </Tooltip>
-    </Marker>
+      eventHandlers={eventHandlers}
+    />
   );
 });
 
@@ -209,6 +173,7 @@ export default function MapaRutas({
   simTiempoMinutos,
   cargasAeropuertoOverride,
   onSelectVuelo,
+  onSelectAeropuerto,
   selectedVuelo,
   umbralVerde,
   umbralAmbar,
@@ -220,7 +185,6 @@ export default function MapaRutas({
   const mostrarSA = true;
 
   const rutasMuestraSA = useMemo(() => resultadoSA?.rutasMuestra || [], [resultadoSA?.rutasMuestra]);
-  const statsAeropuertos = useMemo(() => calcularStatsAeropuertos(rutasMuestraSA), [rutasMuestraSA]);
   const tramosSA = useMemo(() => rutasMuestraSA.flatMap(r => r.tramos), [rutasMuestraSA]);
   const tramosVisiblesSA = useMemo(
     () => filtrarAvionesPorAeropuerto(tramosSA, filtrosAviones),
@@ -366,7 +330,7 @@ export default function MapaRutas({
             key={a.codigo}
             aeropuerto={a}
             cargaActual={cargasAeropuertos[a.codigo] || 0}
-            stats={statsAeropuertos[a.codigo]}
+            onSelectAeropuerto={onSelectAeropuerto}
           />
         ))}
 
