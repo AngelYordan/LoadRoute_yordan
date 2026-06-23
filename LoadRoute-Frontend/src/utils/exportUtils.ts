@@ -4,15 +4,19 @@ import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 
 function formatearRutasParaExportar(rutas: RutaMuestra[]) {
-  return rutas.map(ruta => ({
-    'ID Envío': ruta.envioId,
-    'Cantidad': ruta.cantidadPaquetes,
-    'Origen': ruta.tramos[0]?.origen || '',
-    'Destino': ruta.tramos[ruta.tramos.length - 1]?.destino || '',
-    'Vuelos': ruta.tramos.map(t => `${t.vueloId} (${t.origen}->${t.destino})`).join(', '),
-    'Llegada GMT (Minutos)': ruta.llegadaFinalGMT,
-    'Días offset': ruta.tramos[ruta.tramos.length - 1]?.diaOffset || 0,
-  }));
+  return rutas.map(ruta => {
+    const ultimoTramo = ruta.tramos[ruta.tramos.length - 1];
+    const llegadaFinalGMT = ultimoTramo ? (ultimoTramo.diaOffset * 1440 + ultimoTramo.llegadaMinutosGMT) : 0;
+    return {
+      'ID Envío': ruta.envioId,
+      'Cantidad': ruta.maletas,
+      'Origen': ruta.tramos[0]?.origen || '',
+      'Destino': ultimoTramo?.destino || '',
+      'Vuelos': ruta.tramos.map(t => `${t.vueloId} (${t.origen}->${t.destino})`).join(', '),
+      'Llegada GMT (Minutos)': llegadaFinalGMT,
+      'Días offset': ultimoTramo?.diaOffset || 0,
+    };
+  });
 }
 
 export function exportarAExcel(resultado: RutaResponse) {

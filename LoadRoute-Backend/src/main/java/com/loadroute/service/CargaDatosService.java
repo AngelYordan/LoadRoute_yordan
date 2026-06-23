@@ -7,9 +7,11 @@ import com.loadroute.algorithm.parser.Parsers;
 import com.loadroute.entity.AeropuertoEntity;
 import com.loadroute.entity.EnvioEntity;
 import com.loadroute.entity.VueloEntity;
+import com.loadroute.entity.EnvioDiaADiaEntity;
 import com.loadroute.repository.AeropuertoRepository;
 import com.loadroute.repository.EnvioRepository;
 import com.loadroute.repository.VueloRepository;
+import com.loadroute.repository.EnvioDiaADiaRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -39,15 +41,18 @@ public class CargaDatosService {
     private final AeropuertoRepository aeropuertoRepository;
     private final VueloRepository vueloRepository;
     private final EnvioRepository envioRepository;
+    private final EnvioDiaADiaRepository envioDiaADiaRepository;
     private final JdbcTemplate jdbcTemplate;
 
     public CargaDatosService(AeropuertoRepository aeropuertoRepository,
                               VueloRepository vueloRepository,
                               EnvioRepository envioRepository,
+                              EnvioDiaADiaRepository envioDiaADiaRepository,
                               JdbcTemplate jdbcTemplate) {
         this.aeropuertoRepository = aeropuertoRepository;
         this.vueloRepository = vueloRepository;
         this.envioRepository = envioRepository;
+        this.envioDiaADiaRepository = envioDiaADiaRepository;
         this.jdbcTemplate = jdbcTemplate;
     }
 
@@ -300,5 +305,107 @@ public class CargaDatosService {
 
     public boolean tieneEnvios() {
         return envioRepository.count() > 0;
+    }
+
+    @Transactional
+    public int cargarEnviosDiaADiaDesdeArchivo(MultipartFile file) throws IOException {
+        String filename = file.getOriginalFilename();
+        if (filename == null || filename.isEmpty()) return 0;
+
+        Map<String, Aeropuerto> aeropuertosMap = obtenerAeropuertosDeBDComoModelos();
+        Map<String, Long> dbAeropuertosIds = aeropuertoRepository.findAll().stream()
+                .collect(Collectors.toMap(AeropuertoEntity::getCodigo, AeropuertoEntity::getId));
+
+        Map<String, Envio> parsedEnvios = Parsers.parsearEnvios(file.getInputStream(), filename, aeropuertosMap, 0);
+
+        String sql = "INSERT IGNORE INTO envios_dia_a_dia (clave_compuesta, cliente_id, origen_id, destino_id, fecha_creacion, cantidad_maletas, ruta_definida) VALUES (?, ?, ?, ?, ?, ?, 0)";
+        
+        List<Envio> list = new ArrayList<>(parsedEnvios.values());
+        
+        // Execute batch insert
+        int subBatchSize = 1000;
+        for (int i = 0; i < list.size(); i += subBatchSize) {
+            List<Envio> subList = list.subList(i, Math.min(i + subBatchSize, list.size()));
+            jdbcTemplate.batchUpdate(sql, new org.springframework.jdbc.core.BatchPreparedStatementSetter() {
+                @Override
+                public void setValues(PreparedStatement ps, int idx) throws SQLException {
+                    Envio e = subList.get(idx);
+                    ps.setString(1, e.getId()); // claveCompuesta
+                    ps.setString(2, e.getIdCliente());
+                    ps.setLong(3, dbAeropuertosIds.get(e.getOrigen().getCodigo()));
+                    ps.setLong(4, dbAeropuertosIds.get(e.getDestino().getCodigo()));
+                    
+                    // Save the raw receipt date/time directly (it is already in GMT 0 / simulation time)
+                    LocalDateTime localTime = e.getFechaHoraRecepcion();
+                    
+                    ps.setTimestamp(5, Timestamp.valueOf(localTime));
+                    ps.setInt(6, e.getCantidadMaletas());
+                }
+
+                @Override
+                public int getBatchSize() {
+                    return subList.size();
+                }
+            });
+        }
+        return list.size();
+    }
+
+    @Transactional
+    public void crearEnvioDiaADiaManual(String clienteId, String origenCodigo, String destinoCodigo, LocalDateTime fechaCreacionLocal, int cantidadMaletas) {
+        AeropuertoEntity origen = aeropuertoRepository.findByCodigo(origenCodigo)
+                .orElseThrow(() -> new IllegalArgumentException("Aeropuerto origen " + origenCodigo + " no existe"));
+        AeropuertoEntity destino = aeropuertoRepository.findByCodigo(destinoCodigo)
+                .orElseThrow(() -> new IllegalArgumentException("Aeropuerto destino " + destinoCodigo + " no existe"));
+
+        String uuid = UUID.randomUUID().toString().substring(0, 8);
+        String claveCompuesta = origenCodigo + "_MANUAL_" + uuid;
+
+        EnvioDiaADiaEntity entity = new EnvioDiaADiaEntity();
+        entity.setClaveCompuesta(claveCompuesta);
+        entity.setClienteId(clienteId);
+        entity.setOrigen(origen);
+        entity.setDestino(destino);
+        entity.setFechaCreacion(fechaCreacionLocal);
+        entity.setCantidadMaletas(cantidadMaletas);
+        entity.setRutaDefinida(false);
+
+        envioDiaADiaRepository.save(entity);
+    }
+
+    public List<EnvioDiaADiaEntity> obtenerEnviosDiaADiaTodos() {
+        return envioDiaADiaRepository.findAll();
+    }
+
+    public Map<String, Envio> obtenerEnviosDiaADiaPendientes(Map<String, Aeropuerto> aeropuertosMap, LocalDateTime limite) {
+        List<EnvioDiaADiaEntity> entities = envioDiaADiaRepository.findByRutaDefinidaFalseAndFechaCreacionLessThanEqual(limite);
+        Map<String, Envio> enviosMap = new LinkedHashMap<>();
+        for (EnvioDiaADiaEntity entity : entities) {
+            Aeropuerto origen = aeropuertosMap.get(entity.getOrigen().getCodigo());
+            Aeropuerto destino = aeropuertosMap.get(entity.getDestino().getCodigo());
+            if (origen != null && destino != null) {
+                Envio envio = new Envio(
+                        entity.getClaveCompuesta(),
+                        entity.getClienteId(),
+                        origen,
+                        destino,
+                        entity.getFechaCreacion(),
+                        entity.getCantidadMaletas()
+                );
+                enviosMap.put(entity.getClaveCompuesta(), envio);
+            }
+        }
+        return enviosMap;
+    }
+
+    @Transactional
+    public void marcarEnviosComoProcesados(Collection<String> keys) {
+        if (keys.isEmpty()) return;
+        envioDiaADiaRepository.marcarComoProcesados(keys);
+    }
+
+    @Transactional
+    public void limpiarEnviosDiaADia() {
+        envioDiaADiaRepository.deleteAllInBatch();
     }
 }

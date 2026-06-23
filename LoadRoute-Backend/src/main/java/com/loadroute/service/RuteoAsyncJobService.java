@@ -43,12 +43,24 @@ public class RuteoAsyncJobService {
         cleanupExecutor.scheduleAtFixedRate(this::cleanupExpiredJobs, 5, 5, TimeUnit.MINUTES);
     }
 
+    private String activeDiaADiaJobId;
+
     public SimulacionJobDTO iniciar(int escenario,
                                     String fechaInicio,
                                     String fechaFin) {
         cleanupExpiredJobs();
 
+        if (escenario == 2 && activeDiaADiaJobId != null) {
+            SimulacionJobDTO activeJob = jobs.get(activeDiaADiaJobId);
+            if (activeJob != null && ("RUNNING".equals(activeJob.getStatus()) || "PENDING".equals(activeJob.getStatus()))) {
+                return activeJob.copyStatus();
+            }
+        }
+
         String jobId = UUID.randomUUID().toString();
+        if (escenario == 2) {
+            activeDiaADiaJobId = jobId;
+        }
         SimulacionJobDTO job = new SimulacionJobDTO(jobId, "PENDING", 0, "Iniciando simulacion...");
         jobs.put(jobId, job);
 
@@ -142,6 +154,9 @@ public class RuteoAsyncJobService {
     }
 
     public boolean eliminar(String jobId) {
+        if (jobId.equals(activeDiaADiaJobId)) {
+            activeDiaADiaJobId = null;
+        }
         finishedAt.remove(jobId);
         cancelarTarea(jobId);
         return jobs.remove(jobId) != null;

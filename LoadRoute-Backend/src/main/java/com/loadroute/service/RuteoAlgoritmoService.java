@@ -151,7 +151,12 @@ public class RuteoAlgoritmoService {
 
         report(progress, 18, "Aeropuertos y vuelos cargados. Leyendo envios...");
 
-        LocalDateTime inicioReal = parsearFechaInicio(fechaInicio);
+        LocalDateTime inicioReal;
+        if (escenario == 2 && (fechaInicio == null || fechaInicio.trim().isEmpty())) {
+            inicioReal = LocalDateTime.now(java.time.ZoneOffset.UTC);
+        } else {
+            inicioReal = parsearFechaInicio(fechaInicio);
+        }
         LocalDateTime finReal = parsearFechaFin(fechaFin);
 
         Map<String, Envio> enviosEnMemoria = null;
@@ -378,7 +383,12 @@ public class RuteoAlgoritmoService {
             LocalDateTime loteFin = currentLoteInicio.plusMinutes(scMinutos);
             
             Map<String, Envio> nuevosEnvios = new LinkedHashMap<>();
-            if (baseResponse.getEscenario() != 2) {
+            if (baseResponse.getEscenario() == 2) {
+                nuevosEnvios = cargaDatosService.obtenerEnviosDiaADiaPendientes(aeropuertosMap, loteFin);
+                if (!nuevosEnvios.isEmpty()) {
+                    cargaDatosService.marcarEnviosComoProcesados(nuevosEnvios.keySet());
+                }
+            } else {
                 if (enviosEnMemoria != null) {
                     for (Envio e : enviosEnMemoria.values()) {
                         LocalDateTime rec = e.getFechaHoraRecepcion();

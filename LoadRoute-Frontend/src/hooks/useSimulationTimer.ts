@@ -67,7 +67,23 @@ interface UseSimulationTimerProps {
 
 export function useSimulationTimer({ resultado, fechaInicioRaw, fechaFinRaw }: UseSimulationTimerProps) {
   const simInicioMinutos = useMemo(() => {
-    return resultado?.escenario === 1 ? getInicioOffsetMinutos(fechaInicioRaw) : 0;
+    if (resultado?.escenario === 1) {
+      return getInicioOffsetMinutos(fechaInicioRaw);
+    }
+    if (resultado?.loteInicio) {
+      const parts = resultado.loteInicio.split('T');
+      if (parts.length >= 2) {
+        const timeParts = parts[1].split(':');
+        if (timeParts.length >= 2) {
+          const h = Number(timeParts[0]);
+          const m = Number(timeParts[1]);
+          if (!Number.isNaN(h) && !Number.isNaN(m)) {
+            return h * 60 + m;
+          }
+        }
+      }
+    }
+    return 0;
   }, [resultado, fechaInicioRaw]);
 
   const [simTotalMinutos, setSimTotalMinutos] = useState(simInicioMinutos);
