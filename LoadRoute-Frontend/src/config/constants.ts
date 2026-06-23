@@ -11,4 +11,5 @@ export const API_ENDPOINTS = {
   HEALTH: `${BACKEND_URL}/api/rutas/health`,
   AEROPUERTOS: `${BACKEND_URL}/api/aeropuertos`,
   VUELOS: `${BACKEND_URL}/api/vuelos`,
+  ENVIO_DIA_A_DIA: `${BACKEND_URL}/api/rutas/dia-a-dia`,
 };

@@ -1,26 +1,15 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from 'react';
-import dynamic from 'next/dynamic';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import ControlPanel from '@/components/ControlPanel';
+import AdminPanel from '@/components/AdminPanel';
 import { ColapsoDatos } from '@/components/ModalColapso';
 import { RutaResponse, RutaMuestra, AeropuertoDTO, TramoDTO, FiltrosAvionesMapa } from '@/types/rutas';
 import { verificarSaludBackend } from '@/services/ruteoService';
 import { calcularUltimasCargasAeropuertos, calcularCargaAeropuertoActual } from '@/utils/capacidad';
-import {IconRefresh, IconMap
-} from '@/components/icons';
+import { IconSettings } from '@/components/icons';
 import { useSimulationTimer } from '@/hooks/useSimulationTimer';
 import { DashboardView } from '@/components/DashboardView';
-
-const MapaRutas = dynamic(() => import('@/components/MapaRutas'), {
-  ssr: false,
-  loading: () => (
-    <div className="flex flex-col items-center justify-center h-full rounded-lg bg-[#0f1f3d]/50 border border-slate-700/50">
-      <IconMap className="mb-3 text-cyan-400/60 animate-pulse" size={40} />
-      <p className="text-slate-400 text-sm">Cargando mapa...</p>
-    </div>
-  ),
-});
 
 // ── Tipos de tabs ──
 type TabId = 'pedidos' | 'aeropuertos' | 'simulacion' | 'pantalla' | 'vuelos' | 'resultados' | 'administracion';
@@ -139,8 +128,9 @@ export default function Home() {
   // 1. Estados base del negocio
   const [resultado, setResultado] = useState<RutaResponse | null>(null);
   const [error, setError] = useState('');
-  const [backendActivo, setBackendActivo] = useState<boolean | null>(null);
   const [cargando, setCargando] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [escenario, setEscenario] = useState(1);
 
   // 2. Modals y Layout
   const [envioModal, setEnvioModal] = useState<RutaMuestra | null>(null);
@@ -177,7 +167,6 @@ export default function Home() {
     rangoFinalizado,
     maxSimDia,
     maxTotalMinutos,
-    simInicioMinutos,
     setIsPlaying,
     handleStop,
     resetTimerCompletamente,
@@ -213,7 +202,8 @@ export default function Home() {
   }, [resultado, cargasAeropuertoFinales, rutasActivas, simTotalVisual]);
 
   useEffect(() => {
-    verificarSaludBackend().then(setBackendActivo);
+    // Verificar salud del backend al iniciar
+    verificarSaludBackend();
   }, []);
 
   const [filtrosAvionesMapa, setFiltrosAvionesMapa] = useState<FiltrosAvionesMapa>(FILTROS_AVIONES_INICIALES);
@@ -394,6 +384,29 @@ export default function Home() {
   // ══════════════════════════════════════════════
   // VISTA CARGA DE DATOS (pantalla inicial)
   // ══════════════════════════════════════════════
+  if (showAdmin) {
+    return (
+      <div className="min-h-screen bg-[#0a1628] flex flex-col justify-center p-6">
+        <div className="max-w-4xl w-full mx-auto bg-[#0c1a30] border border-slate-700/40 rounded-xl flex flex-col h-[85vh] shadow-2xl overflow-hidden">
+          <div className="px-6 py-4 bg-[#0f1f3d] border-b border-slate-700/50 flex items-center justify-between shrink-0">
+            <span className="text-sm font-bold text-slate-200 uppercase tracking-wider">
+              Mantenimiento de Maestros y Envíos
+            </span>
+            <button
+              onClick={() => setShowAdmin(false)}
+              className="px-3 py-1.5 rounded-lg text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+            >
+              Regresar al Inicio
+            </button>
+          </div>
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <AdminPanel escenario={escenario} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!resultado) {
     return (
       <div className="min-h-screen bg-[#0a1628] flex flex-col items-center justify-center p-6">
@@ -402,6 +415,8 @@ export default function Home() {
             <img src="/logo.png" alt="LoadRoute Logo" className="h-24 mb-4" />
           </div>
           <ControlPanel
+            escenario={escenario}
+            setEscenario={setEscenario}
             onResultado={(resChunks) => {
               const res = combineChunks(resChunks);
               if (res) {
@@ -450,6 +465,14 @@ export default function Home() {
             </div>
           )}
 
+          <div className="mt-6 pt-4 border-t border-slate-800/60 flex justify-center">
+            <button
+              onClick={() => setShowAdmin(true)}
+              className="text-xs font-semibold text-rose-400 hover:text-rose-300 transition-colors flex items-center gap-1.5"
+            >
+              <IconSettings size={14} /> Mantenimiento de Maestros y Envíos
+            </button>
+          </div>
         </div>
       </div>
     );

@@ -52,3 +52,24 @@ CREATE TABLE IF NOT EXISTS envios (
   CONSTRAINT fk_envios_destino
     FOREIGN KEY (destino_id) REFERENCES aeropuertos (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS envios_dia_a_dia (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  clave_compuesta VARCHAR(255) NOT NULL,
+  cliente_id VARCHAR(255),
+  origen_id BIGINT NOT NULL,
+  destino_id BIGINT NOT NULL,
+  fecha_creacion DATETIME(6) NOT NULL,
+  cantidad_maletas INT NOT NULL,
+  ruta_definida TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_envios_dia_a_dia_clave_compuesta (clave_compuesta),
+  KEY idx_envios_dia_a_dia_fecha_creacion (fecha_creacion),
+  KEY idx_envios_dia_a_dia_ruta_definida (ruta_definida),
+  KEY idx_envios_dia_a_dia_origen (origen_id),
+  KEY idx_envios_dia_a_dia_destino (destino_id),
+  CONSTRAINT fk_envios_dia_a_dia_origen
+    FOREIGN KEY (origen_id) REFERENCES aeropuertos (id),
+  CONSTRAINT fk_envios_dia_a_dia_destino
+    FOREIGN KEY (destino_id) REFERENCES aeropuertos (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

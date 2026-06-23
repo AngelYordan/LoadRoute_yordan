@@ -16,8 +16,8 @@ export function useWebSocket({ topic, onMessage }: UseWebSocketOptions) {
     const stompClient = new Client({
       webSocketFactory: () => socket,
       reconnectDelay: 5000,
-      debug: (str) => {
-        // console.log(str); // Descomentar para ver logs de STOMP
+      debug: () => {
+        // console.log(); // Descomentar para ver logs de STOMP
       },
       onConnect: () => {
         stompClient.subscribe(topic, (msg) => {

@@ -10,30 +10,54 @@ import {
   eliminarVuelo,
   AeropuertoCreateDTO,
   VueloCreateDTO,
-  VueloResponseDTO
+  VueloResponseDTO,
+  obtenerEnviosDiaADia,
+  crearEnvioDiaADia,
+  limpiarEnviosDiaADia,
+  cargarArchivosDiaADia,
+  EnvioDiaADiaResponse,
+  EnvioDiaADiaCreateDTO
 } from '@/services/maestrosService';
-import { Aeropuerto } from '@/types/rutas';
+import { AeropuertoDTO } from '@/types/rutas';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import {
-  IconBuilding, IconPlane, IconSearch, IconPlus, IconEdit, IconTrash, IconClose,
+  IconBuilding, IconPlane, IconSearch, IconPlus, IconEdit, IconTrash, IconClose, IconPackage, IconRefresh
 } from '@/components/icons';
 
-type AdminTab = 'aeropuertos' | 'vuelos';
+type AdminTab = 'aeropuertos' | 'vuelos' | 'enviosDiaADia';
 
-export default function AdminPanel() {
-  const [activeTab, setActiveTab] = useState<AdminTab>('aeropuertos');
-  const [aeropuertos, setAeropuertos] = useState<Aeropuerto[]>([]);
+interface AdminPanelProps {
+  escenario?: number;
+}
+
+export default function AdminPanel({ escenario }: AdminPanelProps) {
+  const [activeTab, setActiveTab] = useState<AdminTab>(
+    escenario === 2 ? 'enviosDiaADia' : 'aeropuertos'
+  );
+
+  useEffect(() => {
+    if (escenario === 2) {
+      setActiveTab('enviosDiaADia');
+    }
+  }, [escenario]);
+  const [aeropuertos, setAeropuertos] = useState<AeropuertoDTO[]>([]);
   const [vuelos, setVuelos] = useState<VueloResponseDTO[]>([]);
+  const [envios, setEnvios] = useState<EnvioDiaADiaResponse[]>([]);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [searchAero, setSearchAero] = useState('');
   const [searchVuelo, setSearchVuelo] = useState('');
+  const [searchEnvio, setSearchEnvio] = useState('');
   const [aeroForm, setAeroForm] = useState<AeropuertoCreateDTO | null>(null);
   const [vueloForm, setVueloForm] = useState<VueloCreateDTO & { id?: number } | null>(null);
+  const [envioForm, setEnvioForm] = useState<EnvioDiaADiaCreateDTO | null>(null);
+  const [envioFile, setEnvioFile] = useState<File | null>(null);
+  const [envioFileName, setEnvioFileName] = useState('');
 
   const [aeroPage, setAeroPage] = useState(1);
   const [vueloPage, setVueloPage] = useState(1);
+  const [envioPage, setEnvioPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
 
   useWebSocket({
@@ -51,8 +75,13 @@ export default function AdminPanel() {
     try {
       if (activeTab === 'aeropuertos') {
         setAeropuertos(await obtenerAeropuertos());
-      } else {
+      } else if (activeTab === 'vuelos') {
         setVuelos(await obtenerVuelos());
+      } else if (activeTab === 'enviosDiaADia') {
+        setEnvios(await obtenerEnviosDiaADia());
+        if (aeropuertos.length === 0) {
+          setAeropuertos(await obtenerAeropuertos());
+        }
       }
     } catch (error: unknown) {
       setErrorMsg(error instanceof Error ? error.message : 'Error al cargar datos');
@@ -65,6 +94,61 @@ export default function AdminPanel() {
     if (isError) setErrorMsg(msg);
     else setSuccessMsg(msg);
     setTimeout(() => { setErrorMsg(''); setSuccessMsg(''); }, 5000);
+  };
+
+  const handleGuardarEnvio = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!envioForm) return;
+    try {
+      await crearEnvioDiaADia(envioForm);
+      showMessage('Envío manual creado correctamente');
+      setEnvioForm(null);
+      cargarDatos();
+    } catch (error: unknown) {
+      showMessage(error instanceof Error ? error.message : 'Error', true);
+    }
+  };
+
+  const handleLimpiarEnvios = async () => {
+    if (!confirm('¿Estás seguro de que deseas limpiar TODOS los envíos del día a día de la base de datos?')) return;
+    try {
+      await limpiarEnviosDiaADia();
+      showMessage('Todos los envíos día a día han sido eliminados.');
+      cargarDatos();
+    } catch (error: unknown) {
+      showMessage(error instanceof Error ? error.message : 'Error', true);
+    }
+  };
+
+  const handleFileChangeEnvios = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) {
+      setEnvioFile(null);
+      setEnvioFileName('');
+      return;
+    }
+    const file = fileList[0];
+    if (file) {
+      setEnvioFile(file);
+      setEnvioFileName(file.name);
+    }
+  };
+
+  const handleSubirArchivoEnvio = async () => {
+    if (!envioFile) return;
+    setLoading(true);
+    setErrorMsg('');
+    try {
+      const res = await cargarArchivosDiaADia(envioFile);
+      showMessage(res.message);
+      setEnvioFile(null);
+      setEnvioFileName('');
+      cargarDatos();
+    } catch (error: unknown) {
+      showMessage(error instanceof Error ? error.message : 'Error', true);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleGuardarAeropuerto = async (e: React.FormEvent) => {
@@ -137,8 +221,13 @@ export default function AdminPanel() {
   }, [searchVuelo]);
 
   useEffect(() => {
+    setEnvioPage(1);
+  }, [searchEnvio]);
+
+  useEffect(() => {
     setAeroPage(1);
     setVueloPage(1);
+    setEnvioPage(1);
   }, [activeTab]);
 
   // Ajustar cantidad de elementos por página según la altura de la pantalla
@@ -177,6 +266,23 @@ export default function AdminPanel() {
     return filteredVuelos.slice(start, start + pageSize);
   }, [filteredVuelos, vueloPage, pageSize]);
 
+  // Paginación Envíos
+  const filteredEnvios = useMemo(() => {
+    return envios.filter(e => 
+      !searchEnvio || 
+      e.claveCompuesta.toLowerCase().includes(searchEnvio.toLowerCase()) || 
+      e.clienteId.toLowerCase().includes(searchEnvio.toLowerCase()) ||
+      e.origen.codigo.toLowerCase().includes(searchEnvio.toLowerCase()) ||
+      e.destino.codigo.toLowerCase().includes(searchEnvio.toLowerCase())
+    );
+  }, [envios, searchEnvio]);
+
+  const totalEnvioPages = Math.max(1, Math.ceil(filteredEnvios.length / pageSize));
+  const paginatedEnvios = useMemo(() => {
+    const start = (envioPage - 1) * pageSize;
+    return filteredEnvios.slice(start, start + pageSize);
+  }, [filteredEnvios, envioPage, pageSize]);
+
   const inputClass = 'w-full bg-slate-800/60 border border-slate-700/60 rounded-lg px-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-rose-500/50 focus:ring-1 focus:ring-rose-500/20 transition-all';
   const labelClass = 'block text-[10px] text-slate-500 uppercase tracking-wider mb-1';
 
@@ -184,23 +290,36 @@ export default function AdminPanel() {
     <div className="flex flex-col h-full overflow-hidden text-slate-200">
       {/* Sub-tabs */}
       <div className="flex border-b border-slate-700/50 bg-[#0f1f3d]/80 shrink-0">
+        {escenario !== 2 && (
+          <>
+            <button
+              className={`flex-1 py-2.5 text-xs font-semibold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5
+                ${activeTab === 'aeropuertos'
+                  ? 'text-rose-400 border-b-2 border-rose-500 bg-rose-500/5'
+                  : 'text-slate-500 hover:text-slate-300'}`}
+              onClick={() => setActiveTab('aeropuertos')}
+            >
+              <IconBuilding size={14} /> Aeropuertos
+            </button>
+            <button
+              className={`flex-1 py-2.5 text-xs font-semibold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5
+                ${activeTab === 'vuelos'
+                  ? 'text-rose-400 border-b-2 border-rose-500 bg-rose-500/5'
+                  : 'text-slate-500 hover:text-slate-300'}`}
+              onClick={() => setActiveTab('vuelos')}
+            >
+              <IconPlane size={14} /> Vuelos
+            </button>
+          </>
+        )}
         <button
           className={`flex-1 py-2.5 text-xs font-semibold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5
-            ${activeTab === 'aeropuertos'
+            ${activeTab === 'enviosDiaADia'
               ? 'text-rose-400 border-b-2 border-rose-500 bg-rose-500/5'
               : 'text-slate-500 hover:text-slate-300'}`}
-          onClick={() => setActiveTab('aeropuertos')}
+          onClick={() => setActiveTab('enviosDiaADia')}
         >
-          <IconBuilding size={14} /> Aeropuertos
-        </button>
-        <button
-          className={`flex-1 py-2.5 text-xs font-semibold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5
-            ${activeTab === 'vuelos'
-              ? 'text-rose-400 border-b-2 border-rose-500 bg-rose-500/5'
-              : 'text-slate-500 hover:text-slate-300'}`}
-          onClick={() => setActiveTab('vuelos')}
-        >
-          <IconPlane size={14} /> Vuelos
+          <IconPackage size={14} /> Envíos Día a Día
         </button>
       </div>
 
@@ -478,6 +597,195 @@ export default function AdminPanel() {
                   type="button"
                   disabled={vueloPage === totalVueloPages}
                   onClick={() => setVueloPage(prev => Math.min(totalVueloPages, prev + 1))}
+                  className="px-2.5 py-1 rounded bg-slate-800 border border-slate-700/60 text-[10px] font-semibold text-slate-300 hover:bg-slate-700/50 hover:text-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                >
+                  Siguiente
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* --- ENVÍOS DÍA A DÍA TAB --- */}
+        {activeTab === 'enviosDiaADia' && (
+          <div className="flex-1 flex flex-col min-h-0">
+            {/* Toolbar / Buscar y Acciones */}
+            <div className="p-3 bg-[#0f1f3d]/30 border-b border-slate-700/30 flex gap-2 items-center justify-between shrink-0">
+              <div className="relative flex-1 max-w-[200px]">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500">
+                  <IconSearch size={12} />
+                </span>
+                <input
+                  type="text"
+                  placeholder="Buscar envío..."
+                  className={`${inputClass} pl-7`}
+                  value={searchEnvio}
+                  onChange={e => setSearchEnvio(e.target.value)}
+                />
+              </div>
+              <div className="flex gap-1.5">
+                <button
+                  onClick={() => {
+                    const now = new Date();
+                    const localIso = now.toISOString().slice(0, 16); // "YYYY-MM-DDTHH:mm"
+                    setEnvioForm({
+                      clienteId: '',
+                      origenCodigo: '',
+                      destinoCodigo: '',
+                      fechaCreacionLocal: localIso,
+                      cantidadMaletas: 1,
+                    });
+                  }}
+                  className="px-2 py-1.5 rounded-lg text-xs bg-rose-500/10 text-rose-300 border border-rose-500/20 font-semibold hover:bg-rose-500/20 transition-all flex items-center gap-1"
+                >
+                  <IconPlus size={14} /> Manual
+                </button>
+                <button
+                  onClick={handleLimpiarEnvios}
+                  className="px-2 py-1.5 rounded-lg text-xs bg-red-500/10 text-red-300 border border-red-500/20 font-semibold hover:bg-red-500/20 transition-all flex items-center gap-1"
+                  title="Limpiar todos los envíos"
+                >
+                  <IconRefresh size={14} /> Limpiar
+                </button>
+              </div>
+            </div>
+
+            {/* Panel de Carga de Archivos */}
+            <div className="px-3 py-2.5 bg-[#0f1f3d]/20 border-b border-slate-700/30 shrink-0">
+              <div className="flex items-center gap-2">
+                <label className="flex-1 bg-slate-800/40 border border-dashed border-slate-700 hover:border-rose-500/30 rounded-lg px-3 py-2 cursor-pointer transition-all flex items-center justify-between text-xs">
+                  <span className="text-slate-400 truncate max-w-[180px]">
+                    {envioFileName || 'Subir archivo (_envios_XXXX_.txt)'}
+                  </span>
+                  <input
+                    type="file"
+                    accept=".txt"
+                    className="hidden"
+                    onChange={handleFileChangeEnvios}
+                  />
+                  <span className="text-[10px] text-rose-400 font-semibold uppercase tracking-wider shrink-0 ml-2">Seleccionar</span>
+                </label>
+                {envioFile && (
+                  <button
+                    onClick={handleSubirArchivoEnvio}
+                    className="px-3 py-2 rounded-lg text-xs bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold hover:bg-emerald-500/30 transition-all"
+                  >
+                    Cargar
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
+              {envioForm && (
+                <form onSubmit={handleGuardarEnvio} className="bg-[#122340] border border-rose-500/30 rounded-lg p-3 space-y-2 mb-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-xs font-semibold text-rose-300">Registrar Envío Manual</p>
+                    <button type="button" onClick={() => setEnvioForm(null)} className="text-slate-500 hover:text-slate-300">
+                      <IconClose size={16} />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="col-span-2">
+                      <label className={labelClass}>Cliente ID</label>
+                      <input required className={inputClass} value={envioForm.clienteId} onChange={e => setEnvioForm({ ...envioForm, clienteId: e.target.value })} placeholder="CLI0001" />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Origen</label>
+                      <select 
+                        required 
+                        className={inputClass} 
+                        value={envioForm.origenCodigo} 
+                        onChange={e => setEnvioForm({ ...envioForm, origenCodigo: e.target.value })}
+                      >
+                        <option value="">Seleccione...</option>
+                        {aeropuertos.map(a => (
+                          <option key={a.codigo} value={a.codigo}>{a.codigo} - {a.ciudad}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelClass}>Destino</label>
+                      <select 
+                        required 
+                        className={inputClass} 
+                        value={envioForm.destinoCodigo} 
+                        onChange={e => setEnvioForm({ ...envioForm, destinoCodigo: e.target.value })}
+                      >
+                        <option value="">Seleccione...</option>
+                        {aeropuertos.map(a => (
+                          <option key={a.codigo} value={a.codigo}>{a.codigo} - {a.ciudad}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelClass}>Fecha / Hora Local</label>
+                      <input required type="datetime-local" className={inputClass} value={envioForm.fechaCreacionLocal} onChange={e => setEnvioForm({ ...envioForm, fechaCreacionLocal: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Cant. Maletas</label>
+                      <input required type="number" min="1" className={inputClass} value={envioForm.cantidadMaletas} onChange={e => setEnvioForm({ ...envioForm, cantidadMaletas: parseInt(e.target.value) || 1 })} />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button type="button" onClick={() => setEnvioForm(null)} className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:bg-slate-700/50">Cancelar</button>
+                    <button type="submit" className="px-3 py-1.5 rounded-lg text-xs bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold hover:bg-emerald-500/30">Guardar</button>
+                  </div>
+                </form>
+              )}
+
+              {loading ? (
+                <p className="text-slate-500 text-xs text-center py-8">Cargando...</p>
+              ) : (
+                paginatedEnvios.map(e => (
+                  <div key={e.id} className="bg-[#122340] border border-slate-700/50 rounded-lg p-3 hover:border-rose-500/30 transition-all">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="font-mono text-xs font-bold text-slate-200">
+                            {e.origen?.codigo} <span className="text-rose-400">→</span> {e.destino?.codigo}
+                          </span>
+                          <span className="text-[10px] font-mono text-slate-500 truncate max-w-[120px]">{e.claveCompuesta}</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 flex gap-3">
+                          <span>Cliente: {e.clienteId}</span>
+                          <span>Maletas: {e.cantidadMaletas}</span>
+                          <span>Registro GMT 0: {e.fechaCreacion?.replace('T', ' ')}</span>
+                        </div>
+                      </div>
+                      <span className={`text-[9px] px-2 py-0.5 rounded font-semibold shrink-0 uppercase tracking-wider
+                        ${e.rutaDefinida 
+                          ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20' 
+                          : 'bg-amber-500/10 text-amber-300 border border-amber-500/20'}`}>
+                        {e.rutaDefinida ? 'Ruta Definida' : 'Pendiente'}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+              {!loading && filteredEnvios.length === 0 && (
+                <p className="text-center text-slate-500 text-xs py-8">No hay envíos registrados</p>
+              )}
+            </div>
+
+            {/* Paginación Envíos */}
+            {!loading && totalEnvioPages > 1 && (
+              <div className="flex items-center justify-between px-3 py-2 border-t border-slate-700/40 bg-[#0f1f3d]/40 shrink-0">
+                <button
+                  type="button"
+                  disabled={envioPage === 1}
+                  onClick={() => setEnvioPage(prev => Math.max(1, prev - 1))}
+                  className="px-2.5 py-1 rounded bg-slate-800 border border-slate-700/60 text-[10px] font-semibold text-slate-300 hover:bg-slate-700/50 hover:text-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                >
+                  Anterior
+                </button>
+                <span className="text-[10px] font-mono text-slate-400">
+                  Pág. {envioPage} de {totalEnvioPages}
+                </span>
+                <button
+                  type="button"
+                  disabled={envioPage === totalEnvioPages}
+                  onClick={() => setEnvioPage(prev => Math.min(totalEnvioPages, prev + 1))}
                   className="px-2.5 py-1 rounded bg-slate-800 border border-slate-700/60 text-[10px] font-semibold text-slate-300 hover:bg-slate-700/50 hover:text-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                 >
                   Siguiente

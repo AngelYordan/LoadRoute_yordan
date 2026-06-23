@@ -5,10 +5,12 @@ import { ejecutarSimulacion } from '@/services/ruteoService';
 import { RutaResponse, SimulacionJob } from '@/types/rutas';
 import {
   IconChart, IconBolt, IconRefresh, IconBuilding, IconPlane, IconPackage,
-  IconClock, IconWarning, IconPlay, IconCheck, IconFolder, IconCalendar
+  IconClock, IconWarning, IconCheck, IconFolder, IconCalendar
 } from '@/components/icons';
 
 interface ControlPanelProps {
+  escenario: number;
+  setEscenario: (escenario: number) => void;
   onResultado: (resultado: RutaResponse[]) => void;
   onError: (error: string) => void;
   onCargando: (cargando: boolean) => void;
@@ -82,6 +84,7 @@ function addDays(date: Date, days: number): Date {
   return next;
 }
 
+// Formatters
 function formatHtmlDate(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -117,13 +120,12 @@ const colorMapActive: Record<string, string> = {
   amber: 'border-amber-400 bg-amber-500/20 ring-1 ring-amber-400/30',
 };
 
-export default function ControlPanel({ onResultado, onError, onCargando, onFechaInicio, onFechaFin, onProgressJob }: ControlPanelProps) {
+export default function ControlPanel({ escenario, setEscenario, onResultado, onError, onCargando, onFechaInicio, onFechaFin, onProgressJob }: ControlPanelProps) {
   const [archivos, setArchivos] = useState<Record<string, FileState>>({
     aeropuertos: { files: [], name: '' },
     vuelos:      { files: [], name: '' },
     envios:      { files: [], name: '' },
   });
-  const [escenario,              setEscenario]              = useState(1);
   const [modoPeriodo,            setModoPeriodo]            = useState<ModoPeriodo>('semanal');
   const [fechaInicio,            setFechaInicio]            = useState('');
   const [horaInicio,             setHoraInicio]             = useState('00:00');
@@ -131,6 +133,24 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
   const [progreso,               setProgreso]               = useState<SimulacionJob | null>(null);
   const [cargaDatosAbierta,      setCargaDatosAbierta]      = useState(false);
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  const configArchivos = useMemo(() => {
+    if (escenario === 2) {
+      return FILE_CONFIGS.filter(cfg => cfg.key === 'envios');
+    }
+    return FILE_CONFIGS;
+  }, [escenario]);
+
+  const archivosCargados = useMemo(() => {
+    return configArchivos.filter(cfg => archivos[cfg.key].files.length > 0).length;
+  }, [configArchivos, archivos]);
+
+  const labelCargaArchivos = useMemo(() => {
+    if (escenario === 2) {
+      return archivos.envios.files.length > 0 ? 'Archivo de envíos cargado' : 'Subir archivo de envíos';
+    }
+    return archivosCargados > 0 ? `${archivosCargados} de 3 tipos cargados` : 'Aeropuertos, planes de vuelo y envíos';
+  }, [escenario, archivosCargados, archivos.envios.files.length]);
 
   const periodoSeleccionado = useMemo(
     () => MODOS_PERIODO.find(modo => modo.id === modoPeriodo) || MODOS_PERIODO[0],
@@ -144,7 +164,6 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
   const fechaInicioBackend = fechaInicio ? toBackendDateTime(fechaInicio, horaInicio) : undefined;
   const fechaFinBackend = escenario === 1 && fechaFinCalculada ? toBackendDateTimeFromDate(fechaFinCalculada) : undefined;
   const esSimulacionPeriodo = escenario === 1 || escenario === 3; // Solo Escenario 1 y 3 requieren periodo definido
-  const archivosCargados = Object.values(archivos).filter(state => state.files.length > 0).length;
   const inicioPeriodoValido = !esSimulacionPeriodo || Boolean(fechaInicio);
 
   const handleFileChange = useCallback((key: string, e: React.ChangeEvent<HTMLInputElement>) => {
@@ -269,7 +288,7 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
                   <span className="text-slate-600 font-normal normal-case tracking-normal text-[10px] ml-1">(opcional)</span>
                 </h3>
                 <p className="text-[10px] text-slate-500 mt-0.5">
-                  {archivosCargados > 0 ? `${archivosCargados} de 3 tipos cargados` : 'Aeropuertos, planes de vuelo y envios'}
+                  {labelCargaArchivos}
                 </p>
               </div>
               <span className={`text-slate-400 transition-transform ${cargaDatosAbierta ? 'rotate-180' : ''}`} aria-hidden>
@@ -280,7 +299,7 @@ export default function ControlPanel({ onResultado, onError, onCargando, onFecha
 
           {cargaDatosAbierta && (
             <div className="mt-2 space-y-2">
-              {FILE_CONFIGS.map(cfg => {
+              {configArchivos.map(cfg => {
                 const state = archivos[cfg.key];
                 const hasFile = state.files.length > 0;
                 return (
