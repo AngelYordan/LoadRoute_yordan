@@ -79,7 +79,6 @@ const AjustadorMapa: React.FC<{ aeropuertos: AeropuertoDTO[] }> = ({ aeropuertos
 
 // Iconos de avión según semáforo
 function crearIconoAvion(color: string, angle: number): L.DivIcon {
-  // SVG de avión perfectamente simétrico y centrado (Apunta al Este para que la rotación sea exacta)
   const svg = encodeURIComponent(`
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
       <path fill="${color}" stroke="white" stroke-width="1" stroke-linejoin="round"
@@ -89,9 +88,14 @@ function crearIconoAvion(color: string, angle: number): L.DivIcon {
 
   return L.divIcon({
     className: 'loadroute-plane-marker',
-    html: `<div style="width:100%;height:100%;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.55));transform:rotate(${angle}deg);transform-origin:center;will-change:transform;background:url('data:image/svg+xml,${svg}') center/contain no-repeat;"></div>`,
-    iconSize: [24, 24],   // <-- Avión más pequeño
-    iconAnchor: [12, 12], // <-- La mitad exacta (12 es la mitad de 24)
+    // El div exterior ocupa los 40x40 invisibles para el clic. El div interior dibuja el avión de 20x20.
+    html: `
+      <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;">
+        <div style="width: 20px; height: 20px; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.55)); transform: rotate(${angle}deg); transform-origin: center; will-change: transform; background: url('data:image/svg+xml,${svg}') center/contain no-repeat;"></div>
+      </div>
+    `,
+    iconSize: [40, 40],   // <-- Área de clic GIGANTE (fácil de atinar)
+    iconAnchor: [20, 20], // <-- La mitad de 40, para que siga milimétricamente anclado a la ruta
   });
 }
 
