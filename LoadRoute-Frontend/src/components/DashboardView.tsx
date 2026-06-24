@@ -324,39 +324,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             filtrosAviones={filtrosAvionesMapa}
           />
 
-          {/* INDICADORES GLOBALES */}
-          {globalStatsAeropuertos && globalStatsAeropuertos.capacidad > 0 && (
-            <div className="absolute bottom-10 left-20 z-[500] pointer-events-none">
-              <div className="bg-[#0c1a30]/90 border border-slate-700/50 rounded-xl px-3 py-2.5 backdrop-blur-sm min-w-[190px]">
-                <p className="text-[9px] font-semibold text-slate-300 uppercase tracking-wider mb-2">Ocupación Global</p>
-                {(() => {
-                  const pct = Math.round((globalStatsAeropuertos.carga / globalStatsAeropuertos.capacidad) * 100);
-                  const color = pct > umbralAmbar ? 'text-red-400'   : pct > umbralVerde ? 'text-amber-400'  : 'text-emerald-400';
-                  const bg    = pct > umbralAmbar ? 'bg-red-500'     : pct > umbralVerde ? 'bg-amber-500'    : 'bg-emerald-500';
-                  const dotColor = pct > umbralAmbar ? 'bg-red-500' : pct > umbralVerde ? 'bg-amber-500' : 'bg-emerald-500';
-                  return (
-                    <div>
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-[10px] text-slate-400 flex items-center gap-1">
-                          <IconWarehouse size={12} /> Almacenes
-                        </span>
-                        <span className={`text-[10px] font-bold ${color} flex items-center gap-1`}>
-                          <span className={`w-2 h-2 rounded-full ${dotColor}`} /> {pct}%
-                        </span>
-                      </div>
-                      <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden mb-1">
-                        <div className={`h-full rounded-full transition-all duration-500 ${bg}`} style={{ width: `${Math.min(pct,100)}%` }} />
-                      </div>
-                      <p className="text-[9px] text-slate-500">
-                        {globalStatsAeropuertos.carga.toLocaleString()} / {globalStatsAeropuertos.capacidad.toLocaleString()} maletas
-                      </p>
-                    </div>
-                  );
-                })()}
-              </div>
-            </div>
-          )}
-
           {/* PANEL LATERAL IZQUIERDO */}
           <div
             className="absolute top-0 left-0 h-full z-[1000] overflow-hidden pointer-events-none"
@@ -421,6 +388,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     rutasActivas={rutasActivas}
                     umbralVerde={umbralVerde}
                     umbralAmbar={umbralAmbar}
+                    // 👇 NUEVO: Le pasamos la función que actualiza el estado del vuelo seleccionado
+                    onSelectVuelo={handleSelectVuelo} 
+                    // 👇 OPCIONAL: Puedes pasarle también el vuelo seleccionado actual 
+                    // para poder ponerle un color de fondo "activo" a la fila seleccionada
+                    selectedVuelo={vueloModal} 
                   />
                 )}
                 {activeTab === 'administracion' && (

@@ -12,6 +12,8 @@ interface SidebarVuelosProps {
   rutasActivas?: RutaMuestra[];
   umbralVerde?: number;
   umbralAmbar?: number;
+  onSelectVuelo?: (vuelo: TramoDTO) => void;
+  selectedVuelo?: TramoDTO | null;
 }
 
 /** Calcula maletas cargadas en cada vuelo en el día seleccionado */
@@ -47,6 +49,8 @@ export default function SidebarVuelos({
   rutasActivas = [],
   umbralVerde = 30,
   umbralAmbar = 70,
+  onSelectVuelo,
+  selectedVuelo,
 }: SidebarVuelosProps) {
   const [selectedDia, setSelectedDia] = useState<number>(simDia);
   const [searchTerm,  setSearchTerm]  = useState('');
@@ -196,21 +200,43 @@ export default function SidebarVuelos({
       {/* ── Lista ── */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
         {paginatedVuelos.map(v => {
+          const isSelected = selectedVuelo?.vueloId === v.vueloId;
           const isCancelled = cancelacionesActivas.has(v.vueloId);
           const oc = ocupacionPorVuelo[v.vueloId];
           const pct = oc ? Math.round((oc.carga / Math.max(oc.capacidad, 1)) * 100) : 0;
           const sem = !isCancelled && oc ? getSemaforoColor(pct, umbralVerde, umbralAmbar) : null;
 
-          const rowClass = isCancelled
+          let rowClass = isCancelled
             ? 'bg-red-950/20 border-red-900/50'
             : sem
               ? `${sem.row} hover:brightness-110`
               : 'bg-[#122340] border-slate-700/50 hover:bg-[#162a4d]';
 
+          if (isSelected) {
+            rowClass += ' ring-2 ring-orange-500 shadow-lg shadow-orange-500/20';
+          }
+
           return (
             <div
               key={`${v.vueloId}-${v.diaOffset ?? 0}`}
-              className={`border rounded-lg p-3 transition-all ${rowClass}`}
+              onClick={() => {
+                let tramoEnElAire = null;
+
+                // Buscamos el tramo activo real en el día seleccionado
+                for (const ruta of rutasActivas) {
+                  const encontrado = ruta.tramos?.find(
+                    (t) => t.vueloId === v.vueloId && (t.diaOffset ?? 0) === selectedDia
+                  );
+                  if (encontrado) {
+                    tramoEnElAire = encontrado;
+                    break;
+                  }
+                }
+
+                // Inyectamos el tramo exacto en el aire o el maestro con el día actual asignado
+                onSelectVuelo?.(tramoEnElAire || { ...v, diaOffset: selectedDia });
+              }}
+              className={`border rounded-lg p-3 transition-all cursor-pointer ${rowClass}`}
             >
               {/* Fila superior: ID + badge */}
               <div className="flex justify-between items-start mb-1.5">

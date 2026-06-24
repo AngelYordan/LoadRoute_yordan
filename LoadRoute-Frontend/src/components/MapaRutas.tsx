@@ -14,6 +14,7 @@ import L from 'leaflet';
 import { RutaResponse, AeropuertoDTO, FiltrosAvionesMapa, RutaMuestra, TramoDTO } from '@/types/rutas';
 import { IconMap } from '@/components/icons';
 import 'leaflet/dist/leaflet.css';
+import { EnfocarAvion } from './EnfocarAvion';
 
 type ModoMapa = 'sa';
 type IndiceCargaAeropuerto = {
@@ -41,6 +42,10 @@ interface MapaRutasProps {
 // Color fijo para aeropuertos: azul del header en operación normal, rojo en colapso
 const AIRPORT_BLUE = '#3b82f6';
 const AIRPORT_COLLAPSE_RED = '#ef4444';
+
+// ── CONSTANTES MATEMÁTICAS PARA CURVAS ──
+const TO_RAD = Math.PI / 180;
+const TO_DEG = 180 / Math.PI;
 
 function isAirportCollapsed(cargaActual: number, capacidadMax: number): boolean {
   if (capacidadMax <= 0) return false;
@@ -74,27 +79,28 @@ const AjustadorMapa: React.FC<{ aeropuertos: AeropuertoDTO[] }> = ({ aeropuertos
 
 // Iconos de avión según semáforo
 function crearIconoAvion(color: string, angle: number): L.DivIcon {
+  // SVG de avión perfectamente simétrico y centrado (Apunta al Este para que la rotación sea exacta)
   const svg = encodeURIComponent(`
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
       <path fill="${color}" stroke="white" stroke-width="1" stroke-linejoin="round"
-        d="M30 16c0 .85-.62 1.56-1.46 1.7l-9.36 1.47-4.86 9.1c-.34.64-1.2.75-1.7.22l-2.17-2.28 2.73-6.08-5.78.84-2.9 2.95c-.36.36-.9.45-1.36.22l-1.1-.55 2.18-5.43v-4.32L2.04 8.41l1.1-.55c.46-.23 1-.14 1.36.22l2.9 2.95 5.78.84-2.73-6.08 2.17-2.28c.5-.53 1.36-.42 1.7.22l4.86 9.1 9.36 1.47c.84.14 1.46.85 1.46 1.7z"/>
+        d="M 21.5,12 C 21.5,13.5 20,13.5 20,13.5 L 14,13.5 L 9,20 L 7,20 L 10,13.5 L 5,13.5 L 3,15.5 L 2,15.5 L 3,12 L 2,8.5 L 3,8.5 L 5,10.5 L 10,10.5 L 7,4 L 9,4 L 14,10.5 L 20,10.5 C 20,10.5 21.5,10.5 21.5,12 Z" />
     </svg>
   `);
 
   return L.divIcon({
     className: 'loadroute-plane-marker',
-    html: `<div style="width:28px;height:28px;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.55));transform:rotate(${angle}deg);transform-origin:center;will-change:transform;background:url('data:image/svg+xml,${svg}') center/contain no-repeat;"></div>`,
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
+    html: `<div style="width:100%;height:100%;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.55));transform:rotate(${angle}deg);transform-origin:center;will-change:transform;background:url('data:image/svg+xml,${svg}') center/contain no-repeat;"></div>`,
+    iconSize: [20, 20],   // <-- Avión más pequeño
+    iconAnchor: [10, 10], // <-- La mitad exacta (10 es la mitad de 20)
   });
 }
 
 function crearIconoAeropuerto(collapsed: boolean): L.DivIcon {
   const color = collapsed ? AIRPORT_COLLAPSE_RED : AIRPORT_BLUE;
   
-  // Nuevo diseño: un círculo moderno con un icono minimalista de torre de control/edificio
+  // viewBox ajustado a 64x64 para que el centro del círculo (cx=32, cy=32) sea el centro real del lienzo
   const svg = encodeURIComponent(`
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
       <circle cx="32" cy="32" r="28" fill="${color}" stroke="white" stroke-width="4" />
       <path fill="white" d="M24 42V26l8-8 8 8v16H24zm4-12v4h8v-4h-8z"/>
     </svg>
@@ -104,10 +110,9 @@ function crearIconoAeropuerto(collapsed: boolean): L.DivIcon {
 
   return L.divIcon({
     className: `loadroute-airport-marker${extraClass}`,
-    html: `<div style="width:30px;height:30px;background:url('data:image/svg+xml,${svg}') center/contain no-repeat; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5)); z-index: 5000;"></div>`,
-    iconSize: [30, 30],
-    iconAnchor: [15, 15]
-    // Forzar zIndex alto en el marker
+    html: `<div style="width:100%;height:100%;background:url('data:image/svg+xml,${svg}') center/contain no-repeat; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5)); z-index: 5000;"></div>`,
+    iconSize: [24, 24], // Se mantiene el mismo tamaño
+    iconAnchor: [12, 12] // Anclaje en el centro absoluto
   });
 }
 
@@ -290,10 +295,10 @@ export default function MapaRutas({
           noWrap={true}
         />
 
-        {/* Polilínea solo para el vuelo seleccionado */}
+        {/* Polilínea curva ortodrómica para el vuelo seleccionado */}
         {selectedVuelo && (
           <Polyline
-            positions={[[selectedVuelo.origenLat, selectedVuelo.origenLon], [selectedVuelo.destinoLat, selectedVuelo.destinoLon]]}
+            positions={generarCurvaOrtodromica(selectedVuelo.origenLat, selectedVuelo.origenLon, selectedVuelo.destinoLat, selectedVuelo.destinoLon)}
             color="#60a5fa"
             weight={3}
             opacity={0.85}
@@ -301,7 +306,7 @@ export default function MapaRutas({
           />
         )}
 
-        {/* Polilíneas de vuelos cancelados del día actual */}
+        {/* Polilíneas curvas de vuelos cancelados del día actual */}
         {vuelosCanceladosHoy.map(vuelo => {
           if (!vuelo) return null;
           const origen = aeropuertos.find(a => a.codigo === vuelo.origen);
@@ -310,7 +315,7 @@ export default function MapaRutas({
           return (
             <Polyline
               key={`canceled-${vuelo.vueloId}`}
-              positions={[[origen.latitud, origen.longitud], [destino.latitud, destino.longitud]]}
+              positions={generarCurvaOrtodromica(origen.latitud, origen.longitud, destino.latitud, destino.longitud)}
               color="#ef4444"
               weight={2}
               opacity={0.7}
@@ -363,6 +368,12 @@ export default function MapaRutas({
         ))}
 
         <AjustadorMapa aeropuertos={aeropuertos} />
+
+        <EnfocarAvion 
+          selectedVuelo={selectedVuelo} 
+          simTiempoMinutos={simTiempoMinutos} 
+          getInterpolatedPosition={getInterpolatedPosition} 
+        />
       </MapContainer>
       <style jsx global>{`
         .loadroute-plane-marker {
@@ -394,8 +405,62 @@ export default function MapaRutas({
   );
 }
 
-// ========================== UTILS ========================== 
+// ========================== UTILS & MATH ========================== 
 
+// ── 1. MATEMÁTICA ORTODRÓMICA (GREAT CIRCLE) ──
+function getGreatCirclePoint(lat1: number, lon1: number, lat2: number, lon2: number, fraction: number) {
+  const rLat1 = lat1 * TO_RAD;
+  const rLon1 = lon1 * TO_RAD;
+  const rLat2 = lat2 * TO_RAD;
+  const rLon2 = lon2 * TO_RAD;
+
+  const dLon = rLon2 - rLon1;
+  const dLat = rLat2 - rLat1;
+
+  // Haversine
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(rLat1) * Math.cos(rLat2) * Math.sin(dLon / 2) ** 2;
+  const d = 2 * Math.asin(Math.sqrt(a));
+
+  if (d === 0) return { lat: lat1, lon: lon1, angle: 0 };
+
+  // Slerp (Spherical linear interpolation)
+  const A = Math.sin((1 - fraction) * d) / Math.sin(d);
+  const B = Math.sin(fraction * d) / Math.sin(d);
+
+  const x = A * Math.cos(rLat1) * Math.cos(rLon1) + B * Math.cos(rLat2) * Math.cos(rLon2);
+  const y = A * Math.cos(rLat1) * Math.sin(rLon1) + B * Math.cos(rLat2) * Math.sin(rLon2);
+  const z = A * Math.sin(rLat1) + B * Math.sin(rLat2);
+
+  const lat3 = Math.atan2(z, Math.sqrt(x * x + y * y));
+  const lon3 = Math.atan2(y, x);
+
+  // Calcular el True Bearing (ángulo real desde el Norte)
+  const yAngle = Math.sin(rLon2 - lon3) * Math.cos(rLat2);
+  const xAngle = Math.cos(lat3) * Math.sin(rLat2) - Math.sin(lat3) * Math.cos(rLat2) * Math.cos(rLon2 - lon3);
+  const trueBearing = Math.atan2(yAngle, xAngle) * TO_DEG;
+  
+  // Ajuste visual: Tu SVG original del avión apunta hacia la derecha (Este, 90° en bearing).
+  // Restamos 90 grados para sincronizar el Norte real del mapa con la nariz de tu avión.
+  const adjustedAngle = trueBearing - 90;
+
+  return { 
+    lat: lat3 * TO_DEG, 
+    lon: lon3 * TO_DEG, 
+    angle: adjustedAngle 
+  };
+}
+
+function generarCurvaOrtodromica(lat1: number, lon1: number, lat2: number, lon2: number, numPuntos = 50): [number, number][] {
+  const puntos: [number, number][] = [];
+  for (let i = 0; i <= numPuntos; i++) {
+    const fraction = i / numPuntos;
+    const pt = getGreatCirclePoint(lat1, lon1, lat2, lon2, fraction);
+    puntos.push([pt.lat, pt.lon]);
+  }
+  return puntos;
+}
+
+// ── 2. UTILS ORIGINALES ──
 function filtrarAvionesPorAeropuerto(tramos: TramoDTO[], filtros?: FiltrosAvionesMapa) {
   if (!filtros || (!filtros.usarOrigen && !filtros.usarDestino)) return tramos;
   if (filtros.usarOrigen && filtros.origenes.length === 0) return [];
@@ -440,8 +505,6 @@ function construirIndiceCargasAeropuertos(rutas: RutaMuestra[]): IndicesCargaAer
 
   for (const ruta of rutas) {
     if (!ruta.tramos || ruta.tramos.length === 0) {
-      // Envío varado (no se le pudo asignar ruta).
-      // Entra al origen en su fecha de recepción, y nunca sale (ocupa espacio indefinidamente).
       const recepcionTotal = ((ruta.recepcionDiaOffset || 0) * 1440) + (ruta.recepcionMinutosGMT || 0);
       agregarIntervaloCarga(intervalos, ruta.origen, recepcionTotal, 9999999, ruta.maletas);
       continue;
@@ -565,6 +628,7 @@ function isFlying(t: TramoDTO, simTotalMinutos: number) {
   return simTotalMinutos >= salidaTotal && simTotalMinutos <= llegadaTotal;
 }
 
+// ── 3. INTERPOLACIÓN INTEGRADA CON LA ESFERA ──
 function getInterpolatedPosition(t: TramoDTO, simTotalMinutos: number) {
   const salidaTotal = salidaTotalMinutos(t);
   const llegadaTotal = llegadaTotalMinutos(t);
@@ -576,17 +640,8 @@ function getInterpolatedPosition(t: TramoDTO, simTotalMinutos: number) {
   if (p < 0) p = 0;
   if (p > 1) p = 1;
   
-  const lat = t.origenLat + (t.destinoLat - t.origenLat) * p;
-  const lon = t.origenLon + (t.destinoLon - t.origenLon) * p;
-  
-  const dLat = t.destinoLat - t.origenLat;
-  const dLon = t.destinoLon - t.origenLon;
-  const midLatRad = ((t.origenLat + t.destinoLat) / 2) * (Math.PI / 180);
-  const dx = dLon * Math.cos(midLatRad);
-  const dy = -dLat;
-  const angle = dx === 0 && dy === 0 ? 0 : Math.atan2(dy, dx) * (180 / Math.PI);
-  
-  return { lat, lon, angle };
+  // Ahora en lugar de matemática plana, invocamos la interpolación sobre la esfera
+  return getGreatCirclePoint(t.origenLat, t.origenLon, t.destinoLat, t.destinoLon, p);
 }
 
 function getActiveFlights(tramos: TramoDTO[], current: number) {
