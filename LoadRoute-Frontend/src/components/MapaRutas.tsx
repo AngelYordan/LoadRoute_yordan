@@ -90,8 +90,8 @@ function crearIconoAvion(color: string, angle: number): L.DivIcon {
   return L.divIcon({
     className: 'loadroute-plane-marker',
     html: `<div style="width:100%;height:100%;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.55));transform:rotate(${angle}deg);transform-origin:center;will-change:transform;background:url('data:image/svg+xml,${svg}') center/contain no-repeat;"></div>`,
-    iconSize: [20, 20],   // <-- Avión más pequeño
-    iconAnchor: [10, 10], // <-- La mitad exacta (10 es la mitad de 20)
+    iconSize: [24, 24],   // <-- Avión más pequeño
+    iconAnchor: [12, 12], // <-- La mitad exacta (12 es la mitad de 24)
   });
 }
 
