@@ -19,6 +19,7 @@ const FILTROS_AVIONES_INICIALES: FiltrosAvionesMapa = {
   usarDestino: false,
   origenes: [],
   destinos: [],
+  ocultarVacios: true,
 };
 
 function getPanelWidth(tab: TabId | null): string {

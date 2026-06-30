@@ -220,7 +220,7 @@ export default function SidebarFiltroMapa({
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="px-3 pt-3 pb-2 bg-[#0f1f3d]/80 border-b border-slate-700/50 shrink-0 backdrop-blur-sm">
+      <div className="px-3 pt-3 pb-3 bg-[#0f1f3d]/80 border-b border-slate-700/50 shrink-0 backdrop-blur-sm">
         <p className="text-xs font-semibold text-cyan-300 uppercase tracking-wider">
           Aviones en pantalla
         </p>
@@ -231,6 +231,19 @@ export default function SidebarFiltroMapa({
           <div className="rounded-md bg-slate-900/50 px-2 py-1.5">
             Destino <span className="font-semibold text-slate-200">{filtros.destinos.length}</span>
           </div>
+        </div>
+        <div className="mt-2.5 pt-2 border-t border-slate-700/30 flex items-center justify-between">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={filtros.ocultarVacios}
+              onChange={() => updateFiltros({ ocultarVacios: !filtros.ocultarVacios })}
+              className="h-3.5 w-3.5 rounded border-slate-600 bg-slate-800 accent-cyan-500 cursor-pointer"
+            />
+            <span className="text-[11px] text-slate-300 font-semibold tracking-wide uppercase">
+              Ocultar aviones vacíos
+            </span>
+          </label>
         </div>
       </div>
 
