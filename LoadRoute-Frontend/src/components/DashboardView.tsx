@@ -1,4 +1,4 @@
-import React, { ReactNode } from 'react';
+import React, { ReactNode, useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 
 import SidebarInfo from './SidebarInfo';
@@ -11,6 +11,7 @@ import ModalEnvio from './ModalEnvio';
 import ModalAeropuerto from './ModalAeropuerto';
 import ModalVuelo from './ModalVuelo';
 import ModalColapso from './ModalColapso';
+import ModalReporteFinal from './ModalReporteFinal';
 
 import {
   IconPackage, IconBuilding, IconSettings, IconScreen, IconPlane, IconClipboard,
@@ -153,6 +154,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const mostrarProgreso = escenario === 1; // 🌟 Único que conserva la barra
   const mostrarFechaSimulacion = escenario === 1 || escenario === 3;
 
+  const [showReporteModal, setShowReporteModal] = useState(false);
+
+  // Abrir reporte automáticamente cuando la simulación termina
+  useEffect(() => {
+    if (mostrarProgreso && rangoFinalizado) {
+      setShowReporteModal(true);
+    }
+  }, [rangoFinalizado, mostrarProgreso]);
+
   const labelEscenario = 
     escenario === 1 ? 'Simulación' : 
     escenario === 2 ? 'Operación' : 'Colapso';
@@ -227,9 +237,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           )}
 
           {mostrarProgreso && rangoFinalizado && (
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
-              <IconCheck size={12} /> Finalizado
-            </span>
+            <div className="flex items-center gap-1.5 ml-2">
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 select-none">
+                <IconCheck size={12} /> Finalizado
+              </span>
+              <button
+                onClick={() => setShowReporteModal(true)}
+                className="px-2.5 py-1 rounded bg-blue-600/25 hover:bg-blue-600/40 text-blue-300 border border-blue-500/30 text-[10px] font-semibold transition-all flex items-center gap-1 shadow-sm"
+              >
+                📊 Ver Reporte
+              </button>
+            </div>
           )}
 
           {/* Controles multimedia Play/Pause/Stop (Habilitados para Escenarios 1 y 3) */}
@@ -467,6 +485,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <ModalColapso
         colapso={colapsoDatos}
         onClose={() => setColapsoDatos(null)}
+      />
+      <ModalReporteFinal
+        isOpen={showReporteModal}
+        onClose={() => setShowReporteModal(false)}
+        resultadoCompleto={resultado}
       />
     </div>
   );
