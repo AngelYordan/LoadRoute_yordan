@@ -230,7 +230,7 @@ export default function ModalVuelo({
                     onCancelarVuelo && (() => {
                       const departureInMinutes = (vuelo.diaOffset ?? 0) * 1440 + vuelo.salidaMinutosGMT;
                       const minutesToDeparture = simTotalMinutos !== undefined ? departureInMinutes - simTotalMinutos : 999;
-                      const canCancel = minutesToDeparture >= 10;
+                      const canCancel = minutesToDeparture >= 60;
                       
                       return (
                         <button
@@ -253,7 +253,7 @@ export default function ModalVuelo({
                               ? 'bg-red-600 hover:bg-red-500' 
                               : 'bg-slate-700 text-slate-400 cursor-not-allowed'
                           }`}
-                          title={!canCancel ? 'Los vuelos ya despegados o a menos de 10 min de despegar no se pueden cancelar' : ''}
+                          title={!canCancel ? 'Los vuelos ya despegados o a menos de 1 hora de despegar no se pueden cancelar' : ''}
                         >
                           {loading ? 'Procesando...' : 'Cancelar Vuelo'}
                         </button>
@@ -265,13 +265,13 @@ export default function ModalVuelo({
               {escenario === 2 && (() => {
                 const departureInMinutes = (vuelo.diaOffset ?? 0) * 1440 + vuelo.salidaMinutosGMT;
                 const minutesToDeparture = simTotalMinutos !== undefined ? departureInMinutes - simTotalMinutos : 999;
-                const canCancel = minutesToDeparture >= 10;
+                const canCancel = minutesToDeparture >= 60;
                 const isCancelled = cancelacionesPorDia && cancelacionesPorDia[vuelo.diaOffset]?.includes(vuelo.vueloId);
                 
                 if (!canCancel && !isCancelled) {
                   return (
                     <p className="text-[10px] text-slate-500 italic">
-                      * No cancelable (ventana de 10 min superada)
+                      * No cancelable (ventana de 1 hora superada)
                     </p>
                   );
                 }
