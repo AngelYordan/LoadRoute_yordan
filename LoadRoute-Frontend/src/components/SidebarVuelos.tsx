@@ -16,6 +16,7 @@ interface SidebarVuelosProps {
   selectedVuelo?: TramoDTO | null;
   fechaInicioRaw?: string;
   aeropuertos?: AeropuertoDTO[];
+  simTiempoMinutos?: number;
 }
 
 /** Calcula maletas cargadas en cada vuelo en el día seleccionado */
@@ -55,6 +56,7 @@ export default function SidebarVuelos({
   selectedVuelo,
   fechaInicioRaw,
   aeropuertos,
+  simTiempoMinutos,
 }: SidebarVuelosProps) {
   const [selectedDia, setSelectedDia] = useState<number>(simDia);
   const [searchTerm,  setSearchTerm]  = useState('');
@@ -118,6 +120,16 @@ export default function SidebarVuelos({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  const isVueloEnElAire = useCallback((v: TramoDTO) => {
+    if (simTiempoMinutos === undefined) return false;
+    const salidaTotal = selectedDia * 1440 + v.salidaMinutosGMT;
+    let llegadaTotal = selectedDia * 1440 + v.llegadaMinutosGMT;
+    if (v.llegadaMinutosGMT < v.salidaMinutosGMT) {
+      llegadaTotal += 1440;
+    }
+    return simTiempoMinutos >= salidaTotal && simTiempoMinutos <= llegadaTotal;
+  }, [selectedDia, simTiempoMinutos]);
+
   const cancelacionesActivas = useMemo(
     () => new Set(cancelacionesPorDia[selectedDia] || []),
     [cancelacionesPorDia, selectedDia]
@@ -167,6 +179,11 @@ export default function SidebarVuelos({
             return pB - pA;
           }
           case 'ocupacion_asc': {
+            const airA = isVueloEnElAire(a);
+            const airB = isVueloEnElAire(b);
+            if (airA && !airB) return -1;
+            if (!airA && airB) return 1;
+
             const pA = ocA ? (ocA.carga / Math.max(ocA.capacidad, 1)) * 100 : 0;
             const pB = ocB ? (ocB.carga / Math.max(ocB.capacidad, 1)) * 100 : 0;
             return pA - pB;
@@ -181,7 +198,7 @@ export default function SidebarVuelos({
     }
 
     return result;
-  }, [filteredBySearch, filtroEstado, cancelacionesActivas, sortKey, ocupacionPorVuelo]);
+  }, [filteredBySearch, filtroEstado, cancelacionesActivas, sortKey, ocupacionPorVuelo, isVueloEnElAire]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paginatedVuelos = useMemo(() => {
@@ -289,6 +306,7 @@ export default function SidebarVuelos({
         {paginatedVuelos.map(v => {
           const isSelected = selectedVuelo?.vueloId === v.vueloId;
           const isCancelled = cancelacionesActivas.has(v.vueloId);
+          const isAir = isVueloEnElAire(v);
           const oc = ocupacionPorVuelo[v.vueloId];
           const pct = oc ? Math.round((oc.carga / Math.max(oc.capacidad, 1)) * 100) : 0;
           const sem = !isCancelled && oc ? getSemaforoColor(pct, umbralVerde, umbralAmbar) : null;
@@ -347,13 +365,27 @@ export default function SidebarVuelos({
                     Cancelado
                   </span>
                 ) : oc ? (
-                  <span className={`px-2 py-0.5 text-[10px] rounded border font-semibold ${sem!.badge}`}>
-                    {pct}%
-                  </span>
+                  <div className="flex gap-1.5 items-center">
+                    {isAir && (
+                      <span className="px-1.5 py-0.5 bg-blue-500/15 text-blue-300 text-[9px] rounded border border-blue-500/30 font-bold uppercase tracking-wider">
+                        En el aire
+                      </span>
+                    )}
+                    <span className={`px-2 py-0.5 text-[10px] rounded border font-semibold ${sem!.badge}`}>
+                      {pct}%
+                    </span>
+                  </div>
                 ) : (
-                  <span className="px-2 py-0.5 bg-slate-700/40 text-slate-400 text-[10px] rounded border border-slate-600/30">
-                    Sin datos
-                  </span>
+                  <div className="flex gap-1.5 items-center">
+                    {isAir && (
+                      <span className="px-1.5 py-0.5 bg-blue-500/15 text-blue-300 text-[9px] rounded border border-blue-500/30 font-bold uppercase tracking-wider">
+                        En el aire
+                      </span>
+                    )}
+                    <span className="px-2 py-0.5 bg-slate-700/40 text-slate-400 text-[10px] rounded border border-slate-600/30">
+                      Sin datos
+                    </span>
+                  </div>
                 )}
               </div>
 
