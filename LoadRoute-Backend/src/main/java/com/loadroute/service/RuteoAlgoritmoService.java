@@ -418,6 +418,8 @@ public class RuteoAlgoritmoService {
                 vuelosCanceladosKeys = dbCancellations.stream()
                         .map(c -> c.getVuelo().getId() + ":" + c.getFecha().toString())
                         .collect(Collectors.toSet());
+            } else if (baseResponse.getEscenario() == 3) {
+                vuelosCanceladosKeys = Collections.emptySet();
             } else {
                 List<VueloCanceladoEntity> dbCancellations = vueloCanceladoRepository.findAll();
                 vuelosCanceladosKeys = dbCancellations.stream()
@@ -579,6 +581,8 @@ public class RuteoAlgoritmoService {
                         futureCancelledVuelosKeys.add(c.getVuelo().getId() + ":" + c.getFecha().toString());
                     }
                 }
+            } else if (baseResponse.getEscenario() == 3) {
+                // No cancellations for Collapse scenario
             } else {
                 List<VueloCanceladoEntity> dbCancellations = vueloCanceladoRepository.findAll();
                 for (VueloCanceladoEntity c : dbCancellations) {

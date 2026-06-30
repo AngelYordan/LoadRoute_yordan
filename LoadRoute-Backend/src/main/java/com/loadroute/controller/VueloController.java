@@ -98,6 +98,10 @@ public class VueloController {
             @RequestParam String fecha,
             @RequestParam(required = false, defaultValue = "2") int escenario) {
         
+        if (escenario == 3) {
+            return ResponseEntity.badRequest().body("No se permiten cancelaciones en el escenario de colapso.");
+        }
+        
         Optional<VueloEntity> optVuelo = vueloRepository.findById(id);
         if (optVuelo.isEmpty()) {
             return ResponseEntity.notFound().build();
@@ -153,6 +157,10 @@ public class VueloController {
             @RequestParam String fecha,
             @RequestParam(required = false, defaultValue = "2") int escenario) {
             
+        if (escenario == 3) {
+            return ResponseEntity.badRequest().body("No se permiten reactivaciones en el escenario de colapso.");
+        }
+            
         LocalDate cancellationDate;
         try {
             cancellationDate = LocalDate.parse(fecha);
@@ -182,7 +190,9 @@ public class VueloController {
             @RequestParam(required = false, defaultValue = "2") int escenario) {
         List<VueloCanceladoDTO> dtos;
         
-        if (escenario == 1) {
+        if (escenario == 3) {
+            dtos = java.util.Collections.emptyList();
+        } else if (escenario == 1) {
             List<com.loadroute.entity.VueloCanceladoPeriodoEntity> list = vueloCanceladoPeriodoRepository.findAll();
             dtos = list.stream().map(c -> {
                 VueloCanceladoDTO dto = new VueloCanceladoDTO();
