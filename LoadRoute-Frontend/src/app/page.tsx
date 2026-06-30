@@ -510,6 +510,8 @@ export default function Home() {
   }, []);
 
   const handleSelectEnvio = useCallback((envio: RutaMuestra) => {
+    setVueloModal(null);
+    setAeroModal(null);
     setEnvioModal(envio);
   }, []);
 
