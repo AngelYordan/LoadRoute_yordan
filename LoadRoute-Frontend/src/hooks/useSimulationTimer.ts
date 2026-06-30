@@ -102,6 +102,7 @@ export function useSimulationTimer({ resultado, fechaInicioRaw, fechaFinRaw }: U
 
   useEffect(() => {
     if (!resultado) {
+      setIsPlaying(false);
       setSimTotalMinutos(0);
       setRealElapsedMs(0);
       hasAlignedRef.current = false;
@@ -190,6 +191,12 @@ export function useSimulationTimer({ resultado, fechaInicioRaw, fechaFinRaw }: U
     return () => clearInterval(id);
   }, []);
 
+  const simTotalMinutosRef = useRef(simTotalMinutos);
+  simTotalMinutosRef.current = simTotalMinutos;
+
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying; // Sincronizado inmediatamente en el renderizado
+
   // Bucle de simulación por delta matemático exacto
   useEffect(() => {
     if (!isPlaying) {
@@ -200,37 +207,59 @@ export function useSimulationTimer({ resultado, fechaInicioRaw, fechaFinRaw }: U
     }
 
     const step = (timestamp: number) => {
+      // Detener de inmediato el bucle si la reproducción se detuvo
+      if (!isPlayingRef.current) {
+        timerRef.current = null;
+        lastFrameRef.current = null;
+        return;
+      }
+
       if (lastFrameRef.current === null) {
         lastFrameRef.current = timestamp;
-        timerRef.current = requestAnimationFrame(step);
+        if (isPlayingRef.current) {
+          timerRef.current = requestAnimationFrame(step);
+        }
         return;
       }
 
       const deltaMs = timestamp - lastFrameRef.current;
 
       if (deltaMs < MAP_FRAME_INTERVAL_MS) {
-        timerRef.current = requestAnimationFrame(step);
+        if (isPlayingRef.current) {
+          timerRef.current = requestAnimationFrame(step);
+        }
         return;
       }
 
       lastFrameRef.current = timestamp;
 
-      setSimTotalMinutos(prev => {
-        // 🌟 MATEMÁTICA EXACTA: Avanza proporcionalmente al tiempo exacto que pasó (deltaMs)
-        const avanceMinutos = deltaMs * avanceMinutosPorMilsegundo;
-        const next = prev + avanceMinutos;
-        
-        if (maxTotalMinutos !== null && next >= maxTotalMinutos) {
-          setIsPlaying(false);
-          return maxTotalMinutos;
-        }
-        return next;
-      });
+      const currentMinutos = simTotalMinutosRef.current;
+      const avanceMinutos = deltaMs * avanceMinutosPorMilsegundo;
+      const next = currentMinutos + avanceMinutos;
 
+      if (maxTotalMinutos !== null && next >= maxTotalMinutos) {
+        setSimTotalMinutos(maxTotalMinutos);
+        setIsPlaying(false);
+        timerRef.current = null;
+        lastFrameRef.current = null;
+        return;
+      }
+
+      setSimTotalMinutos(next);
       setRealElapsedMs(prev => prev + deltaMs);
-      timerRef.current = requestAnimationFrame(step);
+      
+      if (isPlayingRef.current) {
+        timerRef.current = requestAnimationFrame(step);
+      } else {
+        timerRef.current = null;
+      }
     };
 
+    // Antes de iniciar un nuevo bucle, limpiamos cualquier frame anterior existente
+    if (timerRef.current !== null) {
+      cancelAnimationFrame(timerRef.current);
+    }
+    lastFrameRef.current = null;
     timerRef.current = requestAnimationFrame(step);
 
     return () => {

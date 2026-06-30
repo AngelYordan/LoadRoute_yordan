@@ -553,12 +553,12 @@ export default function Home() {
                 setCancelacionesLocales({});
                 cargarCancelacionesBD();
                 setResultado(res);
-                isFirstChunkRef.current = false;
                 inicializarFiltrosAvionesMapa();
-                // fechaInicioRaw ya fue seteado por onFechaInicio antes de ejecutar
-                // res.fechaFin es el último chunk en YYYYMMDD
                 aplicarFechasSimulacion(res, setFechaInicioRaw, setFechaFinRaw, fechaInicioUsuarioRef.current, fechaFinUsuarioRef.current);
-                setIsPlaying(true);
+                if (isFirstChunkRef.current) {
+                  isFirstChunkRef.current = false;
+                  setIsPlaying(true);
+                }
               }
             }}
             onProgressJob={(job) => {
@@ -572,11 +572,11 @@ export default function Home() {
                   setResultado(res);
                   inicializarFiltrosAvionesMapa();
                   aplicarFechasSimulacion(res, setFechaInicioRaw, setFechaFinRaw, fechaInicioUsuarioRef.current, fechaFinUsuarioRef.current);
+                  setIsPlaying(true);
                 } else {
                   setResultado(res);
                   aplicarFechasSimulacion(res, setFechaInicioRaw, setFechaFinRaw, fechaInicioUsuarioRef.current, fechaFinUsuarioRef.current);
                 }
-                setIsPlaying(true);
               }
             }}
             onError={setError}

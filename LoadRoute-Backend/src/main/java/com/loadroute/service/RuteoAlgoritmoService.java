@@ -101,7 +101,7 @@ public class RuteoAlgoritmoService {
         }
 
         if (escenario == 1) {
-            return new ParametrosSimulacion(1, 80);
+            return new ParametrosSimulacion(1, 800);
         }
 
         return new ParametrosSimulacion(1, 80);
