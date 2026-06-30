@@ -22,16 +22,34 @@ public class VueloController {
     private final MaestroService maestroService;
     private final com.loadroute.repository.VueloRepository vueloRepository;
     private final com.loadroute.repository.VueloCanceladoRepository vueloCanceladoRepository;
+    private final com.loadroute.repository.VueloCanceladoPeriodoRepository vueloCanceladoPeriodoRepository;
     private final com.loadroute.service.RuteoAsyncJobService asyncJobService;
 
     public VueloController(MaestroService maestroService,
                            com.loadroute.repository.VueloRepository vueloRepository,
                            com.loadroute.repository.VueloCanceladoRepository vueloCanceladoRepository,
+                           com.loadroute.repository.VueloCanceladoPeriodoRepository vueloCanceladoPeriodoRepository,
                            com.loadroute.service.RuteoAsyncJobService asyncJobService) {
         this.maestroService = maestroService;
         this.vueloRepository = vueloRepository;
         this.vueloCanceladoRepository = vueloCanceladoRepository;
+        this.vueloCanceladoPeriodoRepository = vueloCanceladoPeriodoRepository;
         this.asyncJobService = asyncJobService;
+    }
+
+    @GetMapping("/config-cancelacion")
+    public ResponseEntity<java.util.Map<String, Object>> getConfigCancelacion() {
+        java.util.Map<String, Object> config = new java.util.HashMap<>();
+        com.loadroute.service.RuteoAlgoritmoService.SimulacionIterator iterator = asyncJobService.getActiveIterator();
+        
+        if (iterator != null && iterator.getEscenario() == 1) {
+            config.put("escenario", 1);
+            config.put("limiteMinutos", iterator.getK() * iterator.getSa());
+        } else {
+            config.put("escenario", 2);
+            config.put("limiteMinutos", 60);
+        }
+        return ResponseEntity.ok(config);
     }
 
     @GetMapping
@@ -77,7 +95,8 @@ public class VueloController {
     @PostMapping("/{id}/cancelar")
     public ResponseEntity<String> cancelarVuelo(
             @PathVariable Long id,
-            @RequestParam String fecha) {
+            @RequestParam String fecha,
+            @RequestParam(required = false, defaultValue = "2") int escenario) {
         
         Optional<VueloEntity> optVuelo = vueloRepository.findById(id);
         if (optVuelo.isEmpty()) {
@@ -101,12 +120,28 @@ public class VueloController {
         LocalDateTime departureGMT = departureLocal.minusHours(vuelo.getOrigen().getGmt());
         
         long minutesToDeparture = java.time.Duration.between(currentTime, departureGMT).toMinutes();
-        if (minutesToDeparture < 60) {
-            return ResponseEntity.badRequest().body("No se puede cancelar el vuelo. Ya está en el aire o falta menos de 1 hora para su salida.");
+        long minMinutes = 60;
+        if (escenario == 1) {
+            com.loadroute.service.RuteoAlgoritmoService.SimulacionIterator iterator = asyncJobService.getActiveIterator();
+            if (iterator != null && iterator.getEscenario() == 1) {
+                minMinutes = iterator.getK() * iterator.getSa();
+            } else {
+                minMinutes = 80;
+            }
         }
         
-        if (!vueloCanceladoRepository.existsByVueloIdAndFecha(id, cancellationDate)) {
-            vueloCanceladoRepository.save(new VueloCanceladoEntity(vuelo, cancellationDate));
+        if (minutesToDeparture <= minMinutes) {
+            return ResponseEntity.badRequest().body("No se puede cancelar el vuelo. Falta menos de la ventana mínima (" + minMinutes + " min) para su salida.");
+        }
+        
+        if (escenario == 1) {
+            if (!vueloCanceladoPeriodoRepository.existsByVueloIdAndFecha(id, cancellationDate)) {
+                vueloCanceladoPeriodoRepository.save(new com.loadroute.entity.VueloCanceladoPeriodoEntity(vuelo, cancellationDate));
+            }
+        } else {
+            if (!vueloCanceladoRepository.existsByVueloIdAndFecha(id, cancellationDate)) {
+                vueloCanceladoRepository.save(new VueloCanceladoEntity(vuelo, cancellationDate));
+            }
         }
         
         return ResponseEntity.ok("Vuelo cancelado exitosamente.");
@@ -115,7 +150,8 @@ public class VueloController {
     @PostMapping("/{id}/reactivar")
     public ResponseEntity<String> reactivarVuelo(
             @PathVariable Long id,
-            @RequestParam String fecha) {
+            @RequestParam String fecha,
+            @RequestParam(required = false, defaultValue = "2") int escenario) {
             
         LocalDate cancellationDate;
         try {
@@ -124,25 +160,48 @@ public class VueloController {
             return ResponseEntity.badRequest().body("Formato de fecha inválido. Debe ser YYYY-MM-DD.");
         }
         
-        Optional<VueloCanceladoEntity> optCancel = vueloCanceladoRepository.findByVueloIdAndFecha(id, cancellationDate);
-        if (optCancel.isPresent()) {
-            vueloCanceladoRepository.delete(optCancel.get());
-            return ResponseEntity.ok("Vuelo reactivado exitosamente.");
+        if (escenario == 1) {
+            Optional<com.loadroute.entity.VueloCanceladoPeriodoEntity> optCancel = vueloCanceladoPeriodoRepository.findByVueloIdAndFecha(id, cancellationDate);
+            if (optCancel.isPresent()) {
+                vueloCanceladoPeriodoRepository.delete(optCancel.get());
+                return ResponseEntity.ok("Vuelo reactivado exitosamente.");
+            }
+        } else {
+            Optional<VueloCanceladoEntity> optCancel = vueloCanceladoRepository.findByVueloIdAndFecha(id, cancellationDate);
+            if (optCancel.isPresent()) {
+                vueloCanceladoRepository.delete(optCancel.get());
+                return ResponseEntity.ok("Vuelo reactivado exitosamente.");
+            }
         }
         
         return ResponseEntity.notFound().build();
     }
 
     @GetMapping("/cancelados")
-    public ResponseEntity<List<VueloCanceladoDTO>> listarCancelados() {
-        List<VueloCanceladoEntity> list = vueloCanceladoRepository.findAll();
-        List<VueloCanceladoDTO> dtos = list.stream().map(c -> {
-            VueloCanceladoDTO dto = new VueloCanceladoDTO();
-            dto.setId(c.getId());
-            dto.setVueloId(c.getVuelo().getId());
-            dto.setFecha(c.getFecha().toString());
-            return dto;
-        }).collect(java.util.stream.Collectors.toList());
+    public ResponseEntity<List<VueloCanceladoDTO>> listarCancelados(
+            @RequestParam(required = false, defaultValue = "2") int escenario) {
+        List<VueloCanceladoDTO> dtos;
+        
+        if (escenario == 1) {
+            List<com.loadroute.entity.VueloCanceladoPeriodoEntity> list = vueloCanceladoPeriodoRepository.findAll();
+            dtos = list.stream().map(c -> {
+                VueloCanceladoDTO dto = new VueloCanceladoDTO();
+                dto.setId(c.getId());
+                dto.setVueloId(c.getVuelo().getId());
+                dto.setFecha(c.getFecha().toString());
+                return dto;
+            }).collect(java.util.stream.Collectors.toList());
+        } else {
+            List<VueloCanceladoEntity> list = vueloCanceladoRepository.findAll();
+            dtos = list.stream().map(c -> {
+                VueloCanceladoDTO dto = new VueloCanceladoDTO();
+                dto.setId(c.getId());
+                dto.setVueloId(c.getVuelo().getId());
+                dto.setFecha(c.getFecha().toString());
+                return dto;
+            }).collect(java.util.stream.Collectors.toList());
+        }
+        
         return ResponseEntity.ok(dtos);
     }
 }

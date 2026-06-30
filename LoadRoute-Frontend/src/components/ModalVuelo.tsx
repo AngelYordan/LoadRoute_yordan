@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { BACKEND_URL } from '@/config/constants';
 import { RutaMuestra, TramoDTO, AeropuertoDTO } from '@/types/rutas';
 import { porcentajeOcupacion, formatPorcentaje } from '@/utils/capacidad';
 import { IconPlane, IconClose } from '@/components/icons';
@@ -70,7 +71,19 @@ export default function ModalVuelo({
 }: ModalVueloProps) {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [limiteMinutos, setLimiteMinutos] = useState(60);
   const { position, onMouseDown } = useDraggable(64, 64, !!vuelo);
+
+  useEffect(() => {
+    fetch(`${BACKEND_URL}/api/vuelos/config-cancelacion`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.limiteMinutos) {
+          setLimiteMinutos(data.limiteMinutos);
+        }
+      })
+      .catch(console.error);
+  }, []);
 
   if (!vuelo) return null;
 
@@ -203,7 +216,7 @@ export default function ModalVuelo({
                   </span>
                 )}
                 
-                {escenario === 2 && (
+                {escenario !== 3 && (
                   cancelacionesPorDia && cancelacionesPorDia[vuelo.diaOffset]?.includes(vuelo.vueloId) ? (
                     onReactivarVuelo && (
                       <button
@@ -230,7 +243,7 @@ export default function ModalVuelo({
                     onCancelarVuelo && (() => {
                       const departureInMinutes = (vuelo.diaOffset ?? 0) * 1440 + vuelo.salidaMinutosGMT;
                       const minutesToDeparture = simTotalMinutos !== undefined ? departureInMinutes - simTotalMinutos : 999;
-                      const canCancel = minutesToDeparture >= 60;
+                      const canCancel = minutesToDeparture > limiteMinutos;
                       
                       return (
                         <button
@@ -253,7 +266,7 @@ export default function ModalVuelo({
                               ? 'bg-red-600 hover:bg-red-500' 
                               : 'bg-slate-700 text-slate-400 cursor-not-allowed'
                           }`}
-                          title={!canCancel ? 'Los vuelos ya despegados o a menos de 1 hora de despegar no se pueden cancelar' : ''}
+                          title={!canCancel ? `Los vuelos ya despegados o a menos de ${limiteMinutos} minutos de despegar no se pueden cancelar` : ''}
                         >
                           {loading ? 'Procesando...' : 'Cancelar Vuelo'}
                         </button>
@@ -262,16 +275,16 @@ export default function ModalVuelo({
                   )
                 )}
               </div>
-              {escenario === 2 && (() => {
+              {escenario !== 3 && (() => {
                 const departureInMinutes = (vuelo.diaOffset ?? 0) * 1440 + vuelo.salidaMinutosGMT;
                 const minutesToDeparture = simTotalMinutos !== undefined ? departureInMinutes - simTotalMinutos : 999;
-                const canCancel = minutesToDeparture >= 60;
+                const canCancel = minutesToDeparture > limiteMinutos;
                 const isCancelled = cancelacionesPorDia && cancelacionesPorDia[vuelo.diaOffset]?.includes(vuelo.vueloId);
                 
                 if (!canCancel && !isCancelled) {
                   return (
                     <p className="text-[10px] text-slate-500 italic">
-                      * No cancelable (ventana de 1 hora superada)
+                      * No cancelable (ventana de {limiteMinutos} min superada)
                     </p>
                   );
                 }

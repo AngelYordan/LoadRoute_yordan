@@ -221,12 +221,12 @@ export default function Home() {
 
   const cargarCancelacionesBD = useCallback(async () => {
     try {
-      const list = await obtenerVuelosCancelados();
+      const list = await obtenerVuelosCancelados(resultado?.escenario);
       setCancelacionesBD(list);
     } catch (e) {
       console.error("Error al cargar cancelaciones de BD", e);
     }
-  }, []);
+  }, [resultado?.escenario]);
 
   useEffect(() => {
     // Verificar salud del backend al iniciar
@@ -297,7 +297,7 @@ export default function Home() {
   }, []);
 
   const handleCancelarVuelo = useCallback(async (vueloId: number, fecha: string) => {
-    await cancelarVueloApi(vueloId, fecha);
+    await cancelarVueloApi(vueloId, fecha, resultado?.escenario);
     await cargarCancelacionesBD();
     
     if (fechaInicioRaw) {
@@ -324,7 +324,7 @@ export default function Home() {
   }, [fechaInicioRaw, cargarCancelacionesBD]);
 
   const handleReactivarVuelo = useCallback(async (vueloId: number, fecha: string) => {
-    await reactivarVueloApi(vueloId, fecha);
+    await reactivarVueloApi(vueloId, fecha, resultado?.escenario);
     await cargarCancelacionesBD();
     
     if (fechaInicioRaw) {
