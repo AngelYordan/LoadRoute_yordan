@@ -80,6 +80,7 @@ export interface FiltrosAvionesMapa {
   usarDestino: boolean;
   origenes: string[];
   destinos: string[];
+  ocultarVacios: boolean;
 }
 
 export interface SimulacionJob {

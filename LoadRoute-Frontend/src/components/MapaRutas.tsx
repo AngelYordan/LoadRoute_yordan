@@ -78,6 +78,34 @@ const AjustadorMapa: React.FC<{ aeropuertos: AeropuertoDTO[] }> = ({ aeropuertos
   return null;
 };
 
+// Caching system for Leaflet icons to drastically improve performance and avoid GC pressure
+const planeIconCache: Record<string, L.DivIcon> = {};
+const airportIconCache: Record<string, L.DivIcon> = {};
+
+function getIconoAvionCached(color: string, angle: number): L.DivIcon {
+  const roundedAngle = Math.round(angle / 15) * 15;
+  const key = `${color}-${roundedAngle}`;
+  if (!planeIconCache[key]) {
+    planeIconCache[key] = crearIconoAvion(color, roundedAngle);
+  }
+  return planeIconCache[key];
+}
+
+function getIconoAeropuertoCached(
+  cargaActual: number,
+  capacidadMax: number,
+  umbralVerde: number,
+  umbralAmbar: number,
+  collapsed: boolean
+): L.DivIcon {
+  const p = capacidadMax > 0 ? Math.round((cargaActual / capacidadMax) * 100) : 0;
+  const key = `${p}-${capacidadMax}-${umbralVerde}-${umbralAmbar}-${collapsed}`;
+  if (!airportIconCache[key]) {
+    airportIconCache[key] = crearIconoAeropuerto(cargaActual, capacidadMax, umbralVerde, umbralAmbar, collapsed);
+  }
+  return airportIconCache[key];
+}
+
 // Iconos de avión según semáforo
 function crearIconoAvion(color: string, angle: number): L.DivIcon {
   const svg = encodeURIComponent(`
@@ -154,10 +182,7 @@ const AirportMarker: React.FC<{
   onSelectAeropuerto,
 }) {
   const collapsed = isAirportCollapsed(cargaActual, aeropuerto.capacidadMax);
-  const icon = useMemo(
-    () => crearIconoAeropuerto(cargaActual, aeropuerto.capacidadMax, umbralVerde, umbralAmbar, collapsed),
-    [cargaActual, aeropuerto.capacidadMax, umbralVerde, umbralAmbar, collapsed]
-  );
+  const icon = getIconoAeropuertoCached(cargaActual, aeropuerto.capacidadMax, umbralVerde, umbralAmbar, collapsed);
   const eventHandlers = useMemo(
     () => ({ click: () => onSelectAeropuerto(aeropuerto) }),
     [aeropuerto, onSelectAeropuerto]
@@ -191,7 +216,7 @@ const PlaneMarker: React.FC<{
 }) {
   const { lat, lon, angle } = getInterpolatedPosition(tramo, simTiempoMinutos);
   const color = getPlaneColor(carga, tramo.capacidad, umbralVerde, umbralAmbar);
-  const icon = useMemo(() => crearIconoAvion(color, angle), [color, angle]);
+  const icon = getIconoAvionCached(color, angle);
   const eventHandlers = useMemo(() => ({ click: () => onSelectVuelo(tramo) }), [onSelectVuelo, tramo]);
 
   return (
@@ -284,7 +309,7 @@ export default function MapaRutas({
   }, [activePlanesSA]);
 
   const emptyPlanesSA = useMemo(() => {
-    if (!mostrarSA) return [];
+    if (!mostrarSA || filtrosAviones?.ocultarVacios) return [];
     return activeMasterPlanesToday.filter(v => {
       if (activePlanesSAKeys.has(`${v.vueloId}-${v.diaOffset}`)) return false;
       const listCancelaciones = cancelacionesPorDia || resultado?.cancelacionesPorDiaSA;
@@ -292,7 +317,7 @@ export default function MapaRutas({
       if (ids && ids.includes(v.vueloId)) return false;
       return true;
     });
-  }, [mostrarSA, activeMasterPlanesToday, activePlanesSAKeys, cancelacionesPorDia, resultado?.cancelacionesPorDiaSA]);
+  }, [mostrarSA, activeMasterPlanesToday, activePlanesSAKeys, cancelacionesPorDia, resultado?.cancelacionesPorDiaSA, filtrosAviones?.ocultarVacios]);
 
   const emptyPlanesSAFiltered = useMemo(() => {
     return filtrarAvionesPorAeropuerto(emptyPlanesSA, filtrosAviones);
@@ -332,7 +357,7 @@ export default function MapaRutas({
         {/* Polilínea curva ortodrómica para el vuelo seleccionado */}
         {selectedVuelo && (
           <Polyline
-            positions={generarCurvaOrtodromica(selectedVuelo.origenLat, selectedVuelo.origenLon, selectedVuelo.destinoLat, selectedVuelo.destinoLon)}
+            positions={getCurvaOrtodromicaCached(selectedVuelo.origenLat, selectedVuelo.origenLon, selectedVuelo.destinoLat, selectedVuelo.destinoLon)}
             color="#60a5fa"
             weight={3}
             opacity={0.85}
@@ -349,7 +374,7 @@ export default function MapaRutas({
           return (
             <Polyline
               key={`canceled-${vuelo.vueloId}`}
-              positions={generarCurvaOrtodromica(origen.latitud, origen.longitud, destino.latitud, destino.longitud)}
+              positions={getCurvaOrtodromicaCached(origen.latitud, origen.longitud, destino.latitud, destino.longitud)}
               color="#ef4444"
               weight={2}
               opacity={0.7}
@@ -484,6 +509,16 @@ function getGreatCirclePoint(lat1: number, lon1: number, lat2: number, lon2: num
     lon: lon3 * TO_DEG, 
     angle: adjustedAngle 
   };
+}
+
+const curveCache: Record<string, [number, number][]> = {};
+
+function getCurvaOrtodromicaCached(lat1: number, lon1: number, lat2: number, lon2: number): [number, number][] {
+  const key = `${lat1.toFixed(4)},${lon1.toFixed(4)}->${lat2.toFixed(4)},${lon2.toFixed(4)}`;
+  if (!curveCache[key]) {
+    curveCache[key] = generarCurvaOrtodromica(lat1, lon1, lat2, lon2);
+  }
+  return curveCache[key];
 }
 
 function generarCurvaOrtodromica(lat1: number, lon1: number, lat2: number, lon2: number, numPuntos = 50): [number, number][] {
