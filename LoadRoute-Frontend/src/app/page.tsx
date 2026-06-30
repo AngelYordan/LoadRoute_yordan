@@ -88,8 +88,10 @@ function aplicarFechasSimulacion(
   fechaInicioUsuario?: string,
   fechaFinUsuario?: string,
 ) {
-  setInicio(res.fechaInicio || fechaInicioUsuario || '');
-  setFin(res.fechaFin || fechaFinUsuario || '');
+  const inicio = (fechaInicioUsuario && fechaInicioUsuario.length >= 12) ? fechaInicioUsuario : (res.fechaInicio || fechaInicioUsuario || '');
+  const fin = (fechaFinUsuario && fechaFinUsuario.length >= 12) ? fechaFinUsuario : (res.fechaFin || fechaFinUsuario || '');
+  setInicio(inicio);
+  setFin(fin);
 }
 
 function formatoHora(minutos: number): string {
