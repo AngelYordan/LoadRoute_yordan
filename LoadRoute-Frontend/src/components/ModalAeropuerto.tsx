@@ -1,5 +1,5 @@
 import { AeropuertoDTO, RutaMuestra } from '@/types/rutas';
-import { calcularCargaAeropuertoActual, porcentajeOcupacion, formatPorcentaje } from '@/utils/capacidad';
+import { calcularCargaAeropuertoActual, porcentajeOcupacion, formatPorcentaje, obtenerEnviosEnAeropuertoActual } from '@/utils/capacidad';
 import { IconBuilding, IconClose } from '@/components/icons';
 
 interface ModalAeropuertoProps {
@@ -8,6 +8,7 @@ interface ModalAeropuertoProps {
   simTiempoMinutos?: number;
   cargasAeropuertoOverride?: Record<string, number> | null;
   onClose: () => void;
+  onSelectEnvio?: (e: RutaMuestra) => void;
 }
 
 export default function ModalAeropuerto({
@@ -16,6 +17,7 @@ export default function ModalAeropuerto({
   simTiempoMinutos,
   cargasAeropuertoOverride,
   onClose,
+  onSelectEnvio,
 }: ModalAeropuertoProps) {
   if (!aeropuerto) return null;
 
@@ -38,6 +40,10 @@ export default function ModalAeropuerto({
       if (ruta.tramos[i].destino === aeropuerto.codigo) actividad.transito++;
     }
   }
+
+  const enviosEnAeropuerto = simTiempoMinutos !== undefined
+    ? obtenerEnviosEnAeropuertoActual(aeropuerto.codigo, rutas, simTiempoMinutos)
+    : [];
 
   return (
     <div className="fixed left-16 top-16 z-[10000] w-[340px] max-w-[calc(100vw-5rem)] max-h-[calc(100vh-5rem)] flex flex-col bg-[#0f1f3d]/95 border border-slate-700 rounded-lg shadow-2xl animate-in fade-in slide-in-from-left-2 duration-200">
@@ -124,6 +130,38 @@ export default function ModalAeropuerto({
               <p className="text-lg font-bold text-amber-300">{actividad.transito}</p>
               <p className="text-[10px] text-slate-500">transito</p>
             </div>
+          </div>
+        </div>
+
+        {/* Listado de Envíos en el Almacén */}
+        <div className="bg-slate-800/40 border border-slate-700/50 rounded-md overflow-hidden flex flex-col">
+          <div className="px-2.5 py-2 border-b border-slate-700/50">
+            <p className="text-[9px] text-slate-400 uppercase tracking-widest">Pedidos en almacén ({enviosEnAeropuerto.length})</p>
+          </div>
+          <div className="p-2 space-y-1.5 overflow-y-auto max-h-[160px] custom-scrollbar">
+            {enviosEnAeropuerto.length === 0 ? (
+              <p className="text-[11px] text-slate-500 text-center py-3">No hay pedidos en este almacén actualmente</p>
+            ) : (
+              enviosEnAeropuerto.map(envio => (
+                <div
+                  key={envio.envioId}
+                  onClick={() => onSelectEnvio && onSelectEnvio(envio)}
+                  className="p-2 rounded bg-slate-900/30 border border-slate-700/30 hover:border-slate-500/50 hover:bg-slate-800/50 transition-all cursor-pointer flex justify-between items-center"
+                >
+                  <div className="min-w-0 flex-1 pr-2">
+                    <p className="text-[11px] font-mono font-bold text-slate-200 truncate">{envio.envioId}</p>
+                    <p className="text-[9px] text-slate-400">
+                      Ruta: <span className="font-semibold">{envio.origen}</span> → <span className="font-semibold">{envio.destino}</span>
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="text-[10px] font-bold text-cyan-400 bg-cyan-950/20 border border-cyan-800/30 rounded px-1.5 py-0.5">
+                      {envio.maletas} {envio.maletas === 1 ? 'maleta' : 'maletas'}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>

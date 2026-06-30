@@ -448,6 +448,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         rutasActivas={rutasActivas}
         simTiempoMinutos={simTotalVisual}
         cargasAeropuertoOverride={cargasAeropuertoFinales}
+        onSelectEnvio={handleSelectEnvio}
         onClose={() => setAeroModal(null)}
       />
       <ModalVuelo
