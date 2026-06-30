@@ -19,6 +19,12 @@ interface SidebarVuelosProps {
   simTiempoMinutos?: number;
 }
 
+function formatMinutosGMT(minutos: number): string {
+  const h = Math.floor(minutos / 60) % 24;
+  const m = Math.floor(minutos % 60);
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+}
+
 /** Calcula maletas cargadas en cada vuelo en el día seleccionado */
 function calcularOcupacionPorVuelo(
   rutasActivas: RutaMuestra[],
@@ -89,6 +95,22 @@ export default function SidebarVuelos({
     date.setUTCDate(date.getUTCDate() + diaOffset);
     date.setUTCHours(0, minutosGMT, 0, 0);
     date.setUTCHours(date.getUTCHours() + gmtOffset);
+    
+    const day = date.getUTCDate();
+    const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Set", "Oct", "Nov", "Dic"];
+    const month = monthNames[date.getUTCMonth()];
+    return ` (${day}-${month})`;
+  }, [fechaInicioRaw]);
+
+  const getGmtDayLabel = useCallback((diaOffset: number, minutosGMT: number) => {
+    if (!fechaInicioRaw || fechaInicioRaw.length < 8) return '';
+    const y = parseInt(fechaInicioRaw.slice(0, 4));
+    const m = parseInt(fechaInicioRaw.slice(4, 6)) - 1;
+    const d = parseInt(fechaInicioRaw.slice(6, 8));
+    
+    const date = new Date(Date.UTC(y, m, d));
+    date.setUTCDate(date.getUTCDate() + diaOffset);
+    date.setUTCHours(0, minutosGMT, 0, 0);
     
     const day = date.getUTCDate();
     const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Set", "Oct", "Nov", "Dic"];
@@ -326,11 +348,10 @@ export default function SidebarVuelos({
           const gmtOrigen = origenAero?.gmt ?? 0;
           const gmtDestino = destinoAero?.gmt ?? 0;
 
-          const localSalidaLabel = getLocalDayLabel(selectedDia, v.salidaMinutosGMT, gmtOrigen);
-          const localLlegadaLabel = getLocalDayLabel(
+          const gmtSalidaLabel = getGmtDayLabel(selectedDia, v.salidaMinutosGMT);
+          const gmtLlegadaLabel = getGmtDayLabel(
             selectedDia + (v.llegadaMinutosGMT < v.salidaMinutosGMT ? 1 : 0),
-            v.llegadaMinutosGMT,
-            gmtDestino
+            v.llegadaMinutosGMT
           );
 
           return (
@@ -414,8 +435,8 @@ export default function SidebarVuelos({
 
               {/* Horarios */}
               <div className="flex justify-between text-[10px] text-slate-300">
-                <span>Sale: {v.horaSalidaLocal}{localSalidaLabel}</span>
-                <span>Llega: {v.horaLlegadaLocal}{localLlegadaLabel}</span>
+                <span>Sale: {formatMinutosGMT(v.salidaMinutosGMT)} GMT{gmtSalidaLabel}</span>
+                <span>Llega: {formatMinutosGMT(v.llegadaMinutosGMT)} GMT{gmtLlegadaLabel}</span>
               </div>
             </div>
           );
