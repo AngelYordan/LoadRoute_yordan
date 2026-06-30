@@ -42,12 +42,12 @@ public class RedLogistica {
         return buscarRutas(envio, soloConCapacidad, Collections.emptySet(), minSalidaGMT);
     }
 
-    public List<List<Vuelo>> buscarRutas(Envio envio, boolean soloConCapacidad, Set<Integer> vuelosCancelados, LocalDateTime minSalidaGMT) {
+    public List<List<Vuelo>> buscarRutas(Envio envio, boolean soloConCapacidad, Set<String> vuelosCancelados, LocalDateTime minSalidaGMT) {
         String          codigoOrigen  = envio.getOrigen().getCodigo();
         String          codigoDestino = envio.getDestino().getCodigo();
         LocalDateTime   disponibleGMT = minSalidaGMT != null && minSalidaGMT.isAfter(envio.getRecepcionGMT()) 
-                                            ? minSalidaGMT 
-                                            : envio.getRecepcionGMT();
+                                             ? minSalidaGMT 
+                                             : envio.getRecepcionGMT();
         LocalDateTime   deadlineGMT   = envio.getDeadlineGMT();
         int             maletas       = envio.getCantidadMaletas();
 
@@ -65,10 +65,13 @@ public class RedLogistica {
                     .getOrDefault(estado.aeropuertoActual, Collections.emptyList());
 
             for (Vuelo vuelo : vuelosDisponibles) {
-                if (vuelosCancelados != null && vuelosCancelados.contains(vuelo.getId())) continue;
+                LocalDateTime proximaSalida = vuelo.getProximaSalidaGMT(estado.tiempoActual, BUFFER_CONEXION);
+                java.time.LocalDate fechaLocal = proximaSalida.plusHours(vuelo.getOrigen().getGmt()).toLocalDate();
+                String key = vuelo.getId() + ":" + fechaLocal.toString();
+
+                if (vuelosCancelados != null && vuelosCancelados.contains(key)) continue;
                 if (soloConCapacidad && !vuelo.tieneCapacidad(maletas)) continue;
 
-                LocalDateTime proximaSalida = vuelo.getProximaSalidaGMT(estado.tiempoActual, BUFFER_CONEXION);
                 LocalDateTime llegada       = vuelo.getLlegadaGMT(proximaSalida);
 
                 if (llegada.isAfter(deadlineGMT)) continue;
@@ -92,7 +95,7 @@ public class RedLogistica {
         return buscarRutas(envio, false, Collections.emptySet(), minSalidaGMT);
     }
 
-    public List<List<Vuelo>> buscarRutasRelajadas(Envio envio, Set<Integer> vuelosCancelados, LocalDateTime minSalidaGMT) {
+    public List<List<Vuelo>> buscarRutasRelajadas(Envio envio, Set<String> vuelosCancelados, LocalDateTime minSalidaGMT) {
         return buscarRutas(envio, false, vuelosCancelados, minSalidaGMT);
     }
 

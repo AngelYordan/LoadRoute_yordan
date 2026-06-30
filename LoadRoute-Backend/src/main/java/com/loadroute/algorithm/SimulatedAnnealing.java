@@ -54,6 +54,7 @@ public class SimulatedAnnealing {
     private final RedLogistica red;
     private LocalDateTime tiempoPlanificacion = null;
     private String periodoString = null;
+    private Set<String> vuelosCanceladosKeys = Collections.emptySet();
 
     public SimulatedAnnealing setTiempoPlanificacion(LocalDateTime t) {
         this.tiempoPlanificacion = t;
@@ -62,6 +63,13 @@ public class SimulatedAnnealing {
 
     public SimulatedAnnealing setPeriodoString(String p) {
         this.periodoString = p;
+        return this;
+    }
+
+    public SimulatedAnnealing setVuelosCanceladosKeys(Set<String> keys) {
+        if (keys != null) {
+            this.vuelosCanceladosKeys = keys;
+        }
         return this;
     }
 
@@ -204,7 +212,7 @@ public class SimulatedAnnealing {
         String cacheKey = envio.getOrigen().getCodigo() + "->" + envio.getDestino().getCodigo();
         List<List<Vuelo>> alternativas = cache.get(cacheKey);
         if (alternativas == null) {
-            List<List<Vuelo>> rutasEncontradas = red.buscarRutasRelajadas(envio, tiempoPlanificacion);
+            List<List<Vuelo>> rutasEncontradas = red.buscarRutasRelajadas(envio, vuelosCanceladosKeys, tiempoPlanificacion);
             // Hacer una lista mutable y agregar la opción de desasignar (ruta vacía)
             alternativas = new ArrayList<>(rutasEncontradas);
             alternativas.add(Collections.emptyList());
@@ -578,9 +586,9 @@ public class SimulatedAnnealing {
     private SolucionEstado construirGreedy(Map<String, Envio> envios) {
         SolucionEstado sol = new SolucionEstado(envios);
         for (Envio envio : envios.values()) {
-            List<List<Vuelo>> rutas = red.buscarRutas(envio, true, tiempoPlanificacion);
+            List<List<Vuelo>> rutas = red.buscarRutas(envio, true, vuelosCanceladosKeys, tiempoPlanificacion);
             if (rutas.isEmpty())
-                rutas = red.buscarRutasRelajadas(envio, tiempoPlanificacion);
+                rutas = red.buscarRutasRelajadas(envio, vuelosCanceladosKeys, tiempoPlanificacion);
             if (!rutas.isEmpty()) {
                 sol.asignarRuta(envio.getId(), rutas.get(0));
                 for (Vuelo v : rutas.get(0))

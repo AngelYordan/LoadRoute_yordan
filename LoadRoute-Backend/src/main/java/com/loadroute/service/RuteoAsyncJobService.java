@@ -22,6 +22,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+import java.time.LocalDateTime;
+
 @Service
 public class RuteoAsyncJobService {
 
@@ -35,6 +37,7 @@ public class RuteoAsyncJobService {
     private final Map<String, java.util.concurrent.ScheduledFuture<?>> simTasks = new ConcurrentHashMap<>();
     private final Map<String, SimulacionJobDTO> jobs = new ConcurrentHashMap<>();
     private final Map<String, Long> finishedAt = new ConcurrentHashMap<>();
+    private final Map<String, RuteoAlgoritmoService.SimulacionIterator> activeIterators = new ConcurrentHashMap<>();
     private final SimpMessagingTemplate messagingTemplate;
 
     public RuteoAsyncJobService(RuteoAlgoritmoService ruteoService, SimpMessagingTemplate messagingTemplate) {
@@ -44,6 +47,17 @@ public class RuteoAsyncJobService {
     }
 
     private String activeDiaADiaJobId;
+
+    public LocalDateTime getActiveJobCurrentTime() {
+        if (activeDiaADiaJobId == null) {
+            return null;
+        }
+        RuteoAlgoritmoService.SimulacionIterator iterator = activeIterators.get(activeDiaADiaJobId);
+        if (iterator != null) {
+            return iterator.getCurrentTime();
+        }
+        return null;
+    }
 
     public SimulacionJobDTO iniciar(int escenario,
                                     String fechaInicio,
@@ -72,6 +86,7 @@ public class RuteoAsyncJobService {
                         (progress, message) -> RuteoAsyncJobService.this.update(jobId, "RUNNING", progress, message)
                 );
 
+                activeIterators.put(jobId, iterator);
                 int saPeriod = iterator.getSa();
                 
                 update(jobId, "RUNNING", 35, "Ejecutando primer salto (Sc)...");
@@ -163,6 +178,7 @@ public class RuteoAsyncJobService {
     }
 
     private void cancelarTarea(String jobId) {
+        activeIterators.remove(jobId);
         java.util.concurrent.ScheduledFuture<?> task = simTasks.remove(jobId);
         if (task != null) {
             task.cancel(true);

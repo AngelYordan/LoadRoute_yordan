@@ -17,9 +17,12 @@ import java.util.Map;
 public class EnvioDiaADiaController {
 
     private final CargaDatosService cargaDatosService;
+    private final com.loadroute.service.RuteoAsyncJobService asyncJobService;
 
-    public EnvioDiaADiaController(CargaDatosService cargaDatosService) {
+    public EnvioDiaADiaController(CargaDatosService cargaDatosService,
+                                  com.loadroute.service.RuteoAsyncJobService asyncJobService) {
         this.cargaDatosService = cargaDatosService;
+        this.asyncJobService = asyncJobService;
     }
 
     @GetMapping("/envios")
@@ -46,12 +49,14 @@ public class EnvioDiaADiaController {
         String clienteId = (String) body.get("clienteId");
         String origenCodigo = (String) body.get("origenCodigo");
         String destinoCodigo = (String) body.get("destinoCodigo");
-        String fechaStr = (String) body.get("fechaCreacionLocal");
         int cantidadMaletas = ((Number) body.get("cantidadMaletas")).intValue();
 
-        LocalDateTime fechaCreacionLocal = LocalDateTime.parse(fechaStr);
+        LocalDateTime fechaCreacionGMT = asyncJobService.getActiveJobCurrentTime();
+        if (fechaCreacionGMT == null) {
+            fechaCreacionGMT = LocalDateTime.now(java.time.ZoneOffset.UTC);
+        }
 
-        cargaDatosService.crearEnvioDiaADiaManual(clienteId, origenCodigo, destinoCodigo, fechaCreacionLocal, cantidadMaletas);
+        cargaDatosService.crearEnvioDiaADiaManual(clienteId, origenCodigo, destinoCodigo, fechaCreacionGMT, cantidadMaletas);
 
         return ResponseEntity.ok(Map.of(
                 "success", true,

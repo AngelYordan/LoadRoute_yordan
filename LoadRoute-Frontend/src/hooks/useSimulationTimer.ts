@@ -86,18 +86,57 @@ export function useSimulationTimer({ resultado, fechaInicioRaw, fechaFinRaw }: U
     return 0;
   }, [resultado, fechaInicioRaw]);
 
-  const [simTotalMinutos, setSimTotalMinutos] = useState(simInicioMinutos);
+  const [simTotalMinutos, setSimTotalMinutos] = useState(0);
   const [realElapsedMs, setRealElapsedMs] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [horaReal, setHoraReal] = useState(() => new Date());
 
   const timerRef = useRef<number | null>(null);
   const lastFrameRef = useRef<number | null>(null);
+  const hasAlignedRef = useRef(false);
+
+  // Reset alignment when scenario changes or starts fresh
+  useEffect(() => {
+    hasAlignedRef.current = false;
+  }, [resultado?.escenario, resultado?.fechaInicio]);
 
   useEffect(() => {
-    setSimTotalMinutos(simInicioMinutos);
-    setRealElapsedMs(0);
-  }, [simInicioMinutos]);
+    if (!resultado) {
+      setSimTotalMinutos(0);
+      setRealElapsedMs(0);
+      hasAlignedRef.current = false;
+      return;
+    }
+
+    let targetMinutos = 0;
+    if (resultado.escenario === 1) {
+      targetMinutos = getInicioOffsetMinutos(fechaInicioRaw);
+    } else {
+      const timeStr = (!hasAlignedRef.current && resultado.chunksCount && resultado.chunksCount > 1)
+        ? resultado.loteFin
+        : resultado.loteInicio;
+
+      if (timeStr) {
+        const parts = timeStr.split('T');
+        if (parts.length >= 2) {
+          const timeParts = parts[1].split(':');
+          if (timeParts.length >= 2) {
+            const h = Number(timeParts[0]);
+            const m = Number(timeParts[1]);
+            if (!Number.isNaN(h) && !Number.isNaN(m)) {
+              targetMinutos = h * 60 + m;
+            }
+          }
+        }
+      }
+    }
+
+    if (!hasAlignedRef.current) {
+      setSimTotalMinutos(targetMinutos);
+      setRealElapsedMs(0);
+      hasAlignedRef.current = true;
+    }
+  }, [resultado, fechaInicioRaw]);
 
   const maxTimelineMinutos = useMemo(() => {
     if (!resultado) return null;

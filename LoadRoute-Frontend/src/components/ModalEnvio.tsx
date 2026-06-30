@@ -1,9 +1,12 @@
 import { RutaMuestra } from '@/types/rutas';
 import { IconClose, IconPackage } from '@/components/icons';
+import { useDraggable } from '@/hooks/useDraggable';
 
 interface ModalEnvioProps {
   envio: RutaMuestra | null;
   onClose: () => void;
+  offsetRight?: boolean;
+  fechaInicioRaw?: string;
 }
 
 function formatGmtMinute(minutos?: number): string {
@@ -14,13 +17,36 @@ function formatGmtMinute(minutos?: number): string {
   return `${h}:${m} GMT`;
 }
 
-export default function ModalEnvio({ envio, onClose }: ModalEnvioProps) {
+function getFechaLocalDate(fechaInicioRaw: string, diaOffset: number): string {
+  if (!fechaInicioRaw || fechaInicioRaw.length < 8) return '';
+  const y = parseInt(fechaInicioRaw.slice(0, 4));
+  const m = parseInt(fechaInicioRaw.slice(4, 6)) - 1;
+  const d = parseInt(fechaInicioRaw.slice(6, 8));
+  const date = new Date(Date.UTC(y, m, d));
+  date.setDate(date.getDate() + diaOffset);
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+export default function ModalEnvio({ envio, onClose, offsetRight, fechaInicioRaw }: ModalEnvioProps) {
+  const initialX = offsetRight ? 380 : 64;
+  const initialY = 64;
+  const { position, onMouseDown } = useDraggable(initialX, initialY, !!envio);
+
   if (!envio) return null;
 
   return (
-    <div className="fixed left-16 top-16 z-[10000] w-[340px] max-w-[calc(100vw-5rem)] max-h-[calc(100vh-5rem)] flex flex-col bg-[#0f1f3d]/95 border border-slate-700 rounded-lg shadow-2xl animate-in fade-in slide-in-from-left-2 duration-200">
-      <div className="px-3 py-2.5 border-b border-slate-700/50 flex items-center justify-between bg-black/15 rounded-t-lg shrink-0">
-        <div className="flex items-center gap-2.5 min-w-0">
+    <div
+      style={{ left: `${position.x}px`, top: `${position.y}px` }}
+      className="fixed z-[10000] w-[340px] max-w-[calc(100vw-5rem)] max-h-[calc(100vh-5rem)] flex flex-col bg-[#0f1f3d]/95 border border-slate-700 rounded-lg shadow-2xl animate-in fade-in slide-in-from-left-2 duration-200"
+    >
+      <div 
+        onMouseDown={onMouseDown}
+        className="px-3 py-2.5 border-b border-slate-700/50 flex items-center justify-between bg-black/15 rounded-t-lg shrink-0 cursor-grab active:cursor-grabbing select-none"
+      >
+        <div className="flex items-center gap-2.5 min-w-0 pointer-events-none">
           <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0">
             <IconPackage size={16} className="text-blue-300" />
           </div>
@@ -61,9 +87,12 @@ export default function ModalEnvio({ envio, onClose }: ModalEnvioProps) {
             <p className="text-base font-bold text-slate-200">{envio.slaHoras}h</p>
           </div>
           <div className="bg-slate-800/40 border border-slate-700/50 rounded-md p-2 text-center">
-            <p className="text-[9px] text-slate-400 uppercase tracking-widest mb-0.5">Recep.</p>
-            <p className="text-[11px] font-mono font-semibold text-slate-200">
+            <p className="text-[9px] text-slate-400 uppercase tracking-widest mb-0.5">Recep. (GMT)</p>
+            <p className="text-[11px] font-mono font-semibold text-slate-200 leading-tight">
               {formatGmtMinute(envio.recepcionMinutosGMT)}
+            </p>
+            <p className="text-[9px] text-blue-300 font-semibold mt-0.5">
+              {getFechaLocalDate(fechaInicioRaw || '', envio.recepcionDiaOffset ?? 0)}
             </p>
           </div>
         </div>
@@ -97,12 +126,16 @@ export default function ModalEnvio({ envio, onClose }: ModalEnvioProps) {
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-2">
                     <div className="rounded bg-slate-900/40 px-2 py-1">
-                      <p className="text-[9px] text-slate-500 uppercase tracking-widest">Sale</p>
-                      <p className="text-[11px] font-mono text-slate-300">{tramo.horaSalidaLocal}</p>
+                      <p className="text-[9px] text-slate-500 uppercase tracking-widest">Sale (GMT)</p>
+                      <p className="text-[11px] font-mono text-slate-300">{formatGmtMinute(tramo.salidaMinutosGMT)}</p>
+                      <p className="text-[9px] text-blue-300 font-semibold">{getFechaLocalDate(fechaInicioRaw || '', tramo.diaOffset)}</p>
                     </div>
                     <div className="rounded bg-slate-900/40 px-2 py-1">
-                      <p className="text-[9px] text-slate-500 uppercase tracking-widest">Llega</p>
-                      <p className="text-[11px] font-mono text-slate-300">{tramo.horaLlegadaLocal}</p>
+                      <p className="text-[9px] text-slate-500 uppercase tracking-widest">Llega (GMT)</p>
+                      <p className="text-[11px] font-mono text-slate-300">{formatGmtMinute(tramo.llegadaMinutosGMT)}</p>
+                      <p className="text-[9px] text-blue-300 font-semibold">
+                        {getFechaLocalDate(fechaInicioRaw || '', tramo.diaOffset + (tramo.llegadaMinutosGMT < tramo.salidaMinutosGMT ? 1 : 0))}
+                      </p>
                     </div>
                   </div>
                 </div>

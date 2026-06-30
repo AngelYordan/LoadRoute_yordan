@@ -88,6 +88,11 @@ interface DashboardViewProps {
   formatoHora: (minutos: number) => string;
   formatTiempoTranscurrido: (minutos: number) => string;
   formatTiempoReal: (ms: number) => string;
+  
+  cancelacionesPorDia: number[][];
+  simTotalMinutos: number;
+  onCancelarVuelo: (vueloId: number, fecha: string) => Promise<void>;
+  onReactivarVuelo: (vueloId: number, fecha: string) => Promise<void>;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -136,6 +141,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   formatoHora,
   formatTiempoTranscurrido,
   formatTiempoReal,
+  cancelacionesPorDia,
+  simTotalMinutos,
+  onCancelarVuelo,
+  onReactivarVuelo,
 }) => {
   // ── MATRIZ DE CONFIGURACIÓN POR ESCENARIO ──
   const escenario = resultado?.escenario ?? 1;
@@ -322,6 +331,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             modoMapa="sa"
             onModoMapa={() => {}}
             filtrosAviones={filtrosAvionesMapa}
+            cancelacionesPorDia={cancelacionesPorDia}
           />
 
           {/* PANEL LATERAL IZQUIERDO */}
@@ -376,14 +386,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 {activeTab === 'vuelos' && (
                   <SidebarVuelos
                     vuelos={resultado.vuelosMaestros || []}
-                    cancelacionesPorDia={resultado.cancelacionesPorDiaSA || []}
+                    cancelacionesPorDia={cancelacionesPorDia}
                     simDia={simDia}
                     maxDia={
-                      diasSimulados > 0
-                        ? diasSimulados - 1
-                        : maxSimDia !== null
-                          ? maxSimDia
-                          : 0
+                      resultado?.escenario === 2
+                        ? Math.max(simDia + 2, 6)
+                        : (diasSimulados > 0 ? diasSimulados - 1 : 0)
                     }
                     rutasActivas={rutasActivas}
                     umbralVerde={umbralVerde}
@@ -393,10 +401,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     // 👇 OPCIONAL: Puedes pasarle también el vuelo seleccionado actual 
                     // para poder ponerle un color de fondo "activo" a la fila seleccionada
                     selectedVuelo={vueloModal} 
+                    fechaInicioRaw={fechaInicioRaw}
+                    aeropuertos={resultado.aeropuertos}
                   />
                 )}
                 {activeTab === 'administracion' && (
-                  <AdminPanel />
+                  <AdminPanel
+                    onSelectEnvio={(envioId: string) => {
+                      const found = rutasActivas.find(r => r.envioId === envioId);
+                      if (found) {
+                        handleSelectEnvio(found);
+                      } else {
+                        alert("El envío aún no ha sido ruteado en la simulación activa (la simulación no ha alcanzado la fecha de registro del envío).");
+                      }
+                    }}
+                  />
                 )}
                 {activeTab === 'resultados' && (
                   <div className="h-full overflow-y-auto custom-scrollbar p-4">
@@ -416,7 +435,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* MODALS */}
-      <ModalEnvio envio={envioModal} onClose={() => setEnvioModal(null)} />
+      <ModalEnvio
+        envio={envioModal}
+        offsetRight={!!vueloModal || !!aeroModal || activeTab !== null}
+        fechaInicioRaw={fechaInicioRaw}
+        onClose={() => setEnvioModal(null)}
+      />
       <ModalAeropuerto
         aeropuerto={aeroModal}
         rutasActivas={rutasActivas}
@@ -427,8 +451,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <ModalVuelo
         vuelo={vueloModal}
         rutasActivas={rutasActivas}
+        cancelacionesPorDia={cancelacionesPorDia}
+        simTotalMinutos={simTotalMinutos}
+        fechaInicioRaw={fechaInicioRaw}
+        onCancelarVuelo={onCancelarVuelo}
+        onReactivarVuelo={onReactivarVuelo}
         onSelectEnvio={handleSelectEnvio}
         onClose={() => setVueloModal(null)}
+        aeropuertos={resultado.aeropuertos}
+        escenario={resultado.escenario}
       />
       <ModalColapso
         colapso={colapsoDatos}
