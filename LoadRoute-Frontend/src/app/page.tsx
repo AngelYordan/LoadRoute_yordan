@@ -231,12 +231,13 @@ export default function Home() {
 
   const cargarCancelacionesBD = useCallback(async () => {
     try {
-      const list = await obtenerVuelosCancelados(resultado?.escenario);
+      const activeEscenario = resultado?.escenario ?? escenario;
+      const list = await obtenerVuelosCancelados(activeEscenario);
       setCancelacionesBD(list);
     } catch (e) {
       console.error("Error al cargar cancelaciones de BD", e);
     }
-  }, [resultado?.escenario]);
+  }, [resultado?.escenario, escenario]);
 
   useEffect(() => {
     // Verificar salud del backend al iniciar
@@ -561,7 +562,6 @@ export default function Home() {
                 colapsoDetectadoRef.current = false;
                 setColapsoDatos(null);
                 setCancelacionesLocales({});
-                cargarCancelacionesBD();
                 setResultado(res);
                 inicializarFiltrosAvionesMapa();
                 aplicarFechasSimulacion(res, setFechaInicioRaw, setFechaFinRaw, fechaInicioUsuarioRef.current, fechaFinUsuarioRef.current);

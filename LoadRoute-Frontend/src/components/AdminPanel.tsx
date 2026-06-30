@@ -631,6 +631,7 @@ export default function AdminPanel({ escenario, onSelectEnvio }: AdminPanelProps
                       clienteId: '',
                       origenCodigo: '',
                       destinoCodigo: '',
+                      fechaCreacionLocal: '',
                       cantidadMaletas: 1,
                     });
                   }}
