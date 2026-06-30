@@ -142,25 +142,42 @@ export default function ModalAeropuerto({
             {enviosEnAeropuerto.length === 0 ? (
               <p className="text-[11px] text-slate-500 text-center py-3">No hay pedidos en este almacén actualmente</p>
             ) : (
-              enviosEnAeropuerto.map(envio => (
-                <div
-                  key={envio.envioId}
-                  onClick={() => onSelectEnvio && onSelectEnvio(envio)}
-                  className="p-2 rounded bg-slate-900/30 border border-slate-700/30 hover:border-slate-500/50 hover:bg-slate-800/50 transition-all cursor-pointer flex justify-between items-center"
-                >
-                  <div className="min-w-0 flex-1 pr-2">
-                    <p className="text-[11px] font-mono font-bold text-slate-200 truncate">{envio.envioId}</p>
-                    <p className="text-[9px] text-slate-400">
-                      Ruta: <span className="font-semibold">{envio.origen}</span> → <span className="font-semibold">{envio.destino}</span>
-                    </p>
+              enviosEnAeropuerto.map(envio => {
+                let tipoFlujo = 'Tránsito';
+                let badgeColor = 'text-amber-400 bg-amber-950/20 border-amber-500/30';
+                if (envio.origen === aeropuerto.codigo) {
+                  tipoFlujo = 'Sale';
+                  badgeColor = 'text-emerald-400 bg-emerald-950/20 border-emerald-500/30';
+                } else if (envio.destino === aeropuerto.codigo) {
+                  tipoFlujo = 'Entra';
+                  badgeColor = 'text-blue-400 bg-blue-950/20 border-blue-500/30';
+                }
+
+                return (
+                  <div
+                    key={envio.envioId}
+                    onClick={() => onSelectEnvio && onSelectEnvio(envio)}
+                    className="p-2 rounded bg-slate-900/30 border border-slate-700/30 hover:border-slate-500/50 hover:bg-slate-800/50 transition-all cursor-pointer flex justify-between items-center"
+                  >
+                    <div className="min-w-0 flex-1 pr-2">
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <span className="text-[11px] font-mono font-bold text-slate-200 truncate">{envio.envioId}</span>
+                        <span className={`text-[8px] font-bold uppercase px-1 rounded border shrink-0 ${badgeColor}`}>
+                          {tipoFlujo}
+                        </span>
+                      </div>
+                      <p className="text-[9px] text-slate-400">
+                        Ruta: <span className="font-semibold">{envio.origen}</span> → <span className="font-semibold">{envio.destino}</span>
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="text-[10px] font-bold text-cyan-400 bg-cyan-950/20 border border-cyan-800/30 rounded px-1.5 py-0.5">
+                        {envio.maletas} {envio.maletas === 1 ? 'maleta' : 'maletas'}
+                      </span>
+                    </div>
                   </div>
-                  <div className="text-right shrink-0">
-                    <span className="text-[10px] font-bold text-cyan-400 bg-cyan-950/20 border border-cyan-800/30 rounded px-1.5 py-0.5">
-                      {envio.maletas} {envio.maletas === 1 ? 'maleta' : 'maletas'}
-                    </span>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
