@@ -50,6 +50,7 @@ public class RuteoAsyncJobService {
     }
 
     private String activeDiaADiaJobId;
+    private String activePeriodoJobId;
 
     public LocalDateTime getActiveJobCurrentTime() {
         if (activeDiaADiaJobId == null) {
@@ -77,6 +78,12 @@ public class RuteoAsyncJobService {
         cleanupExpiredJobs();
 
         if (escenario == 1) {
+            if (activePeriodoJobId != null) {
+                SimulacionJobDTO activeJob = jobs.get(activePeriodoJobId);
+                if (activeJob != null && ("RUNNING".equals(activeJob.getStatus()) || "PENDING".equals(activeJob.getStatus()))) {
+                    return activeJob.copyStatus();
+                }
+            }
             vueloCanceladoPeriodoRepository.deleteAllInBatch();
         }
 
@@ -90,6 +97,8 @@ public class RuteoAsyncJobService {
         String jobId = UUID.randomUUID().toString();
         if (escenario == 2) {
             activeDiaADiaJobId = jobId;
+        } else if (escenario == 1) {
+            activePeriodoJobId = jobId;
         }
         SimulacionJobDTO job = new SimulacionJobDTO(jobId, "PENDING", 0, "Iniciando simulacion...");
         jobs.put(jobId, job);

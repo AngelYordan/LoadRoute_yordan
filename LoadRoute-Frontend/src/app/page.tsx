@@ -88,13 +88,8 @@ function aplicarFechasSimulacion(
   fechaInicioUsuario?: string,
   fechaFinUsuario?: string,
 ) {
-  if (res.escenario === 2 || res.escenario === 3) {
-    setInicio(res.fechaInicio || fechaInicioUsuario || '');
-    setFin(res.fechaFin || '');
-    return;
-  }
-  setInicio(fechaInicioUsuario || res.fechaInicio || '');
-  setFin(fechaFinUsuario || res.fechaFin || '');
+  setInicio(res.fechaInicio || fechaInicioUsuario || '');
+  setFin(res.fechaFin || fechaFinUsuario || '');
 }
 
 function formatoHora(minutos: number): string {
@@ -107,10 +102,17 @@ function combineChunks(chunks: RutaResponse[] | undefined): RutaResponse | null 
   if (!chunks || chunks.length === 0) return null;
   const base = { ...chunks[0] };
   base.chunksCount = chunks.length;
-  base.resultadoSA = base.resultadoSA ? { ...base.resultadoSA, rutasMuestra: [...base.resultadoSA.rutasMuestra] } : null;
+  base.resultadoSA = base.resultadoSA ? { ...base.resultadoSA, rutasMuestra: [...(base.resultadoSA.rutasMuestra || [])] } : null;
   base.totalEnviosCargados = chunks.reduce((total, c) => total + (c.totalEnviosCargados || 0), 0);
 
   base.cancelacionesPorDiaSA = [];
+
+  const rutasMap = new Map<string, any>();
+  if (base.resultadoSA) {
+    for (const r of (base.resultadoSA.rutasMuestra || [])) {
+      rutasMap.set(r.envioId, r);
+    }
+  }
 
   for (let i = 0; i < chunks.length; i++) {
     const c = chunks[i];
@@ -127,12 +129,20 @@ function combineChunks(chunks: RutaResponse[] | undefined): RutaResponse | null 
       base.resultadoSA.enviosAsignados   += c.resultadoSA.enviosAsignados;
       base.resultadoSA.enviosNoAceptados  = (base.resultadoSA.enviosNoAceptados || 0) + (c.resultadoSA.enviosNoAceptados || 0);
       base.resultadoSA.totalEnvios       += c.resultadoSA.totalEnvios;
-      base.resultadoSA.rutasMuestra.push(...c.resultadoSA.rutasMuestra);
+      for (const r of (c.resultadoSA.rutasMuestra || [])) {
+        rutasMap.set(r.envioId, r);
+      }
+      
       if (base.resultadoSA.costoInicial > 0) {
         base.resultadoSA.mejoraRelativa = ((base.resultadoSA.costoInicial - base.resultadoSA.costoFinal) / base.resultadoSA.costoInicial) * 100;
       }
     }
   }
+
+  if (base.resultadoSA) {
+    base.resultadoSA.rutasMuestra = Array.from(rutasMap.values());
+  }
+
   return base;
 }
 
