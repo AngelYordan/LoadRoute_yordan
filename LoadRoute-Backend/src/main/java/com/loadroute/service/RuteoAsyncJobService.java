@@ -39,14 +39,18 @@ public class RuteoAsyncJobService {
     private final Map<String, Long> finishedAt = new ConcurrentHashMap<>();
     private final Map<String, RuteoAlgoritmoService.SimulacionIterator> activeIterators = new ConcurrentHashMap<>();
     private final SimpMessagingTemplate messagingTemplate;
+    private final com.loadroute.repository.VueloCanceladoPeriodoRepository vueloCanceladoPeriodoRepository;
 
-    public RuteoAsyncJobService(RuteoAlgoritmoService ruteoService, SimpMessagingTemplate messagingTemplate) {
+    public RuteoAsyncJobService(RuteoAlgoritmoService ruteoService, SimpMessagingTemplate messagingTemplate,
+                                com.loadroute.repository.VueloCanceladoPeriodoRepository vueloCanceladoPeriodoRepository) {
         this.ruteoService = ruteoService;
         this.messagingTemplate = messagingTemplate;
+        this.vueloCanceladoPeriodoRepository = vueloCanceladoPeriodoRepository;
         cleanupExecutor.scheduleAtFixedRate(this::cleanupExpiredJobs, 5, 5, TimeUnit.MINUTES);
     }
 
     private String activeDiaADiaJobId;
+    private String activePeriodoJobId;
 
     public LocalDateTime getActiveJobCurrentTime() {
         if (activeDiaADiaJobId == null) {
@@ -59,10 +63,29 @@ public class RuteoAsyncJobService {
         return null;
     }
 
+    public RuteoAlgoritmoService.SimulacionIterator getActiveIterator() {
+        for (Map.Entry<String, SimulacionJobDTO> entry : jobs.entrySet()) {
+            if ("RUNNING".equals(entry.getValue().getStatus()) || "PENDING".equals(entry.getValue().getStatus())) {
+                return activeIterators.get(entry.getKey());
+            }
+        }
+        return null;
+    }
+
     public SimulacionJobDTO iniciar(int escenario,
                                     String fechaInicio,
                                     String fechaFin) {
         cleanupExpiredJobs();
+
+        if (escenario == 1) {
+            if (activePeriodoJobId != null) {
+                SimulacionJobDTO activeJob = jobs.get(activePeriodoJobId);
+                if (activeJob != null && ("RUNNING".equals(activeJob.getStatus()) || "PENDING".equals(activeJob.getStatus()))) {
+                    return activeJob.copyStatus();
+                }
+            }
+            vueloCanceladoPeriodoRepository.deleteAllInBatch();
+        }
 
         if (escenario == 2 && activeDiaADiaJobId != null) {
             SimulacionJobDTO activeJob = jobs.get(activeDiaADiaJobId);
@@ -74,6 +97,8 @@ public class RuteoAsyncJobService {
         String jobId = UUID.randomUUID().toString();
         if (escenario == 2) {
             activeDiaADiaJobId = jobId;
+        } else if (escenario == 1) {
+            activePeriodoJobId = jobId;
         }
         SimulacionJobDTO job = new SimulacionJobDTO(jobId, "PENDING", 0, "Iniciando simulacion...");
         jobs.put(jobId, job);

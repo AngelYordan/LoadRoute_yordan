@@ -22,7 +22,9 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 import com.loadroute.repository.VueloCanceladoRepository;
+import com.loadroute.repository.VueloCanceladoPeriodoRepository;
 import com.loadroute.entity.VueloCanceladoEntity;
+import com.loadroute.entity.VueloCanceladoPeriodoEntity;
 
 /**
  * Servicio principal de ruteo de Tasf.B2B.
@@ -35,11 +37,14 @@ public class RuteoAlgoritmoService {
 
     private final CargaDatosService cargaDatosService;
     private final VueloCanceladoRepository vueloCanceladoRepository;
+    private final VueloCanceladoPeriodoRepository vueloCanceladoPeriodoRepository;
 
     public RuteoAlgoritmoService(CargaDatosService cargaDatosService,
-            VueloCanceladoRepository vueloCanceladoRepository) {
+            VueloCanceladoRepository vueloCanceladoRepository,
+            VueloCanceladoPeriodoRepository vueloCanceladoPeriodoRepository) {
         this.cargaDatosService = cargaDatosService;
         this.vueloCanceladoRepository = vueloCanceladoRepository;
+        this.vueloCanceladoPeriodoRepository = vueloCanceladoPeriodoRepository;
     }
 
     public interface SimulacionIterator {
@@ -54,6 +59,8 @@ public class RuteoAlgoritmoService {
         int getSa();
 
         int getK();
+
+        int getEscenario();
 
         LocalDateTime getCurrentTime();
     }
@@ -405,10 +412,18 @@ public class RuteoAlgoritmoService {
             LocalDateTime loteFin = currentLoteInicio.plusMinutes(scMinutos);
 
             // 1. Fetch cancellations from DB and map to Set<String>
-            List<VueloCanceladoEntity> dbCancellations = vueloCanceladoRepository.findAll();
-            Set<String> vuelosCanceladosKeys = dbCancellations.stream()
-                    .map(c -> c.getVuelo().getId() + ":" + c.getFecha().toString())
-                    .collect(Collectors.toSet());
+            Set<String> vuelosCanceladosKeys;
+            if (baseResponse.getEscenario() == 1) {
+                List<VueloCanceladoPeriodoEntity> dbCancellations = vueloCanceladoPeriodoRepository.findAll();
+                vuelosCanceladosKeys = dbCancellations.stream()
+                        .map(c -> c.getVuelo().getId() + ":" + c.getFecha().toString())
+                        .collect(Collectors.toSet());
+            } else {
+                List<VueloCanceladoEntity> dbCancellations = vueloCanceladoRepository.findAll();
+                vuelosCanceladosKeys = dbCancellations.stream()
+                        .map(c -> c.getVuelo().getId() + ":" + c.getFecha().toString())
+                        .collect(Collectors.toSet());
+            }
 
             // 2. Identify and re-route affected shipments
             List<String> enviosParaReencaminar = new ArrayList<>();
@@ -552,9 +567,27 @@ public class RuteoAlgoritmoService {
             }
 
             List<Integer> currentCancelledIds = new ArrayList<>();
-            for (VueloCanceladoEntity c : dbCancellations) {
-                if (c.getFecha().equals(currentLoteInicio.toLocalDate())) {
-                    currentCancelledIds.add(c.getVuelo().getId().intValue());
+            Set<String> futureCancelledVuelosKeys = new HashSet<>();
+            
+            if (baseResponse.getEscenario() == 1) {
+                List<VueloCanceladoPeriodoEntity> dbCancellations = vueloCanceladoPeriodoRepository.findAll();
+                for (VueloCanceladoPeriodoEntity c : dbCancellations) {
+                    if (c.getFecha().equals(currentLoteInicio.toLocalDate())) {
+                        currentCancelledIds.add(c.getVuelo().getId().intValue());
+                    }
+                    if (c.getFecha().isEqual(fechaInicioRangoDia) || c.getFecha().isAfter(fechaInicioRangoDia)) {
+                        futureCancelledVuelosKeys.add(c.getVuelo().getId() + ":" + c.getFecha().toString());
+                    }
+                }
+            } else {
+                List<VueloCanceladoEntity> dbCancellations = vueloCanceladoRepository.findAll();
+                for (VueloCanceladoEntity c : dbCancellations) {
+                    if (c.getFecha().equals(currentLoteInicio.toLocalDate())) {
+                        currentCancelledIds.add(c.getVuelo().getId().intValue());
+                    }
+                    if (c.getFecha().isEqual(fechaInicioRangoDia) || c.getFecha().isAfter(fechaInicioRangoDia)) {
+                        futureCancelledVuelosKeys.add(c.getVuelo().getId() + ":" + c.getFecha().toString());
+                    }
                 }
             }
 
@@ -603,6 +636,11 @@ public class RuteoAlgoritmoService {
         @Override
         public int getK() {
             return baseResponse.getK();
+        }
+
+        @Override
+        public int getEscenario() {
+            return baseResponse.getEscenario();
         }
 
         @Override

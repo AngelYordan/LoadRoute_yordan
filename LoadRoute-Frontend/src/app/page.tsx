@@ -88,13 +88,8 @@ function aplicarFechasSimulacion(
   fechaInicioUsuario?: string,
   fechaFinUsuario?: string,
 ) {
-  if (res.escenario === 2 || res.escenario === 3) {
-    setInicio(res.fechaInicio || fechaInicioUsuario || '');
-    setFin(res.fechaFin || '');
-    return;
-  }
-  setInicio(fechaInicioUsuario || res.fechaInicio || '');
-  setFin(fechaFinUsuario || res.fechaFin || '');
+  setInicio(res.fechaInicio || fechaInicioUsuario || '');
+  setFin(res.fechaFin || fechaFinUsuario || '');
 }
 
 function formatoHora(minutos: number): string {
@@ -107,10 +102,17 @@ function combineChunks(chunks: RutaResponse[] | undefined): RutaResponse | null 
   if (!chunks || chunks.length === 0) return null;
   const base = { ...chunks[0] };
   base.chunksCount = chunks.length;
-  base.resultadoSA = base.resultadoSA ? { ...base.resultadoSA, rutasMuestra: [...base.resultadoSA.rutasMuestra] } : null;
+  base.resultadoSA = base.resultadoSA ? { ...base.resultadoSA, rutasMuestra: [...(base.resultadoSA.rutasMuestra || [])] } : null;
   base.totalEnviosCargados = chunks.reduce((total, c) => total + (c.totalEnviosCargados || 0), 0);
 
   base.cancelacionesPorDiaSA = [];
+
+  const rutasMap = new Map<string, any>();
+  if (base.resultadoSA) {
+    for (const r of (base.resultadoSA.rutasMuestra || [])) {
+      rutasMap.set(r.envioId, r);
+    }
+  }
 
   for (let i = 0; i < chunks.length; i++) {
     const c = chunks[i];
@@ -127,12 +129,20 @@ function combineChunks(chunks: RutaResponse[] | undefined): RutaResponse | null 
       base.resultadoSA.enviosAsignados   += c.resultadoSA.enviosAsignados;
       base.resultadoSA.enviosNoAceptados  = (base.resultadoSA.enviosNoAceptados || 0) + (c.resultadoSA.enviosNoAceptados || 0);
       base.resultadoSA.totalEnvios       += c.resultadoSA.totalEnvios;
-      base.resultadoSA.rutasMuestra.push(...c.resultadoSA.rutasMuestra);
+      for (const r of (c.resultadoSA.rutasMuestra || [])) {
+        rutasMap.set(r.envioId, r);
+      }
+      
       if (base.resultadoSA.costoInicial > 0) {
         base.resultadoSA.mejoraRelativa = ((base.resultadoSA.costoInicial - base.resultadoSA.costoFinal) / base.resultadoSA.costoInicial) * 100;
       }
     }
   }
+
+  if (base.resultadoSA) {
+    base.resultadoSA.rutasMuestra = Array.from(rutasMap.values());
+  }
+
   return base;
 }
 
@@ -221,12 +231,12 @@ export default function Home() {
 
   const cargarCancelacionesBD = useCallback(async () => {
     try {
-      const list = await obtenerVuelosCancelados();
+      const list = await obtenerVuelosCancelados(resultado?.escenario);
       setCancelacionesBD(list);
     } catch (e) {
       console.error("Error al cargar cancelaciones de BD", e);
     }
-  }, []);
+  }, [resultado?.escenario]);
 
   useEffect(() => {
     // Verificar salud del backend al iniciar
@@ -297,7 +307,7 @@ export default function Home() {
   }, []);
 
   const handleCancelarVuelo = useCallback(async (vueloId: number, fecha: string) => {
-    await cancelarVueloApi(vueloId, fecha);
+    await cancelarVueloApi(vueloId, fecha, resultado?.escenario);
     await cargarCancelacionesBD();
     
     if (fechaInicioRaw) {
@@ -324,7 +334,7 @@ export default function Home() {
   }, [fechaInicioRaw, cargarCancelacionesBD]);
 
   const handleReactivarVuelo = useCallback(async (vueloId: number, fecha: string) => {
-    await reactivarVueloApi(vueloId, fecha);
+    await reactivarVueloApi(vueloId, fecha, resultado?.escenario);
     await cargarCancelacionesBD();
     
     if (fechaInicioRaw) {

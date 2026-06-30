@@ -166,8 +166,9 @@ export async function verificarSaludBackend(): Promise<boolean> {
   }
 }
 
-export async function cancelarVuelo(vueloId: number, fecha: string): Promise<string> {
+export async function cancelarVuelo(vueloId: number, fecha: string, escenario?: number): Promise<string> {
   const params = new URLSearchParams({ fecha });
+  if (escenario !== undefined) params.set('escenario', String(escenario));
   const response = await fetch(`${API_ENDPOINTS.VUELOS}/${vueloId}/cancelar?${params.toString()}`, {
     method: 'POST'
   });
@@ -178,8 +179,9 @@ export async function cancelarVuelo(vueloId: number, fecha: string): Promise<str
   return response.text();
 }
 
-export async function reactivarVuelo(vueloId: number, fecha: string): Promise<string> {
+export async function reactivarVuelo(vueloId: number, fecha: string, escenario?: number): Promise<string> {
   const params = new URLSearchParams({ fecha });
+  if (escenario !== undefined) params.set('escenario', String(escenario));
   const response = await fetch(`${API_ENDPOINTS.VUELOS}/${vueloId}/reactivar?${params.toString()}`, {
     method: 'POST'
   });
@@ -190,8 +192,11 @@ export async function reactivarVuelo(vueloId: number, fecha: string): Promise<st
   return response.text();
 }
 
-export async function obtenerVuelosCancelados(): Promise<{ id: number; vueloId: number; fecha: string }[]> {
-  const response = await fetch(`${API_ENDPOINTS.VUELOS}/cancelados`);
+export async function obtenerVuelosCancelados(escenario?: number): Promise<{ id: number; vueloId: number; fecha: string }[]> {
+  const params = new URLSearchParams();
+  if (escenario !== undefined) params.set('escenario', String(escenario));
+  const queryString = params.toString() ? `?${params.toString()}` : '';
+  const response = await fetch(`${API_ENDPOINTS.VUELOS}/cancelados${queryString}`);
   if (!response.ok) {
     throw new Error(`Error al obtener vuelos cancelados: ${response.status}`);
   }

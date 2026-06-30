@@ -110,13 +110,22 @@ export function useSimulationTimer({ resultado, fechaInicioRaw, fechaFinRaw }: U
     }
 
     let targetMinutos = 0;
-    if (resultado.escenario === 1) {
-      targetMinutos = getInicioOffsetMinutos(fechaInicioRaw);
-    } else {
-      const timeStr = (!hasAlignedRef.current && resultado.chunksCount && resultado.chunksCount > 1)
-        ? resultado.loteFin
-        : resultado.loteInicio;
+    const timeStr = (!hasAlignedRef.current && resultado.chunksCount && resultado.chunksCount > 1)
+      ? resultado.loteFin
+      : resultado.loteInicio;
 
+    if (resultado.escenario === 1) {
+      if (timeStr) {
+        const offset = getFinOffsetMinutos(fechaInicioRaw, timeStr);
+        if (offset !== null) {
+          targetMinutos = offset;
+        } else {
+          targetMinutos = getInicioOffsetMinutos(fechaInicioRaw);
+        }
+      } else {
+        targetMinutos = getInicioOffsetMinutos(fechaInicioRaw);
+      }
+    } else {
       if (timeStr) {
         const parts = timeStr.split('T');
         if (parts.length >= 2) {
@@ -130,6 +139,12 @@ export function useSimulationTimer({ resultado, fechaInicioRaw, fechaFinRaw }: U
           }
         }
       }
+    }
+
+    // Atrasar un chunk visualmente para ver la animación del progreso reciente al unirse a una simulación activa
+    if (!hasAlignedRef.current && resultado.chunksCount && resultado.chunksCount > 1) {
+      const inicioAbsoluto = resultado.escenario === 1 ? getInicioOffsetMinutos(fechaInicioRaw) : 0;
+      targetMinutos = Math.max(inicioAbsoluto, targetMinutos - (resultado.sa || 0));
     }
 
     if (!hasAlignedRef.current) {
