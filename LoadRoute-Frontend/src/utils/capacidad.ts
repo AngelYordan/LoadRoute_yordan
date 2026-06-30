@@ -141,3 +141,47 @@ export function colorOcupacion(cargaActual: number, capacidadMax: number): strin
   if (cargaActual > capacidadMax * 0.8) return 'amber';
   return 'emerald';
 }
+
+export function obtenerEnviosEnAeropuertoActual(
+  airportCode: string,
+  rutas: RutaMuestra[],
+  simTotalMinutos: number
+): RutaMuestra[] {
+  const result: RutaMuestra[] = [];
+
+  for (const ruta of rutas) {
+    if (!ruta.tramos || ruta.tramos.length === 0) continue;
+
+    const primerVuelo = ruta.tramos[0];
+    const primeraSalida = salidaTotalMinutos(primerVuelo);
+    const recepcionTotal = ((ruta.recepcionDiaOffset ?? primerVuelo.diaOffset) || 0) * 1440
+      + (ruta.recepcionMinutosGMT ?? 0);
+
+    if (
+      airportCode === ruta.origen &&
+      simTotalMinutos >= recepcionTotal &&
+      simTotalMinutos <= primeraSalida
+    ) {
+      result.push(ruta);
+      continue;
+    }
+
+    for (let i = 0; i < ruta.tramos.length - 1; i++) {
+      const vueloLlegada = ruta.tramos[i];
+      const vueloSalida = ruta.tramos[i + 1];
+      const llegadaEscala = llegadaTotalMinutos(vueloLlegada);
+      const salidaEscala = salidaTotalMinutos(vueloSalida);
+
+      if (
+        airportCode === vueloLlegada.destino &&
+        simTotalMinutos >= llegadaEscala &&
+        simTotalMinutos <= salidaEscala
+      ) {
+        result.push(ruta);
+        break;
+      }
+    }
+  }
+
+  return result;
+}
