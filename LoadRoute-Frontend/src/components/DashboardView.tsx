@@ -403,7 +403,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     onChange={setFiltrosAvionesMapa}
                   />
                 )}
-                {activeTab === 'vuelos' && (
+                 {activeTab === 'vuelos' && (
                   <SidebarVuelos
                     vuelos={resultado.vuelosMaestros || []}
                     cancelacionesPorDia={cancelacionesPorDia}
@@ -423,6 +423,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     selectedVuelo={vueloModal} 
                     fechaInicioRaw={fechaInicioRaw}
                     aeropuertos={resultado.aeropuertos}
+                    simTiempoMinutos={simTotalVisual}
                   />
                 )}
                 {activeTab === 'administracion' && (
