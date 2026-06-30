@@ -363,6 +363,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     cargasAeropuertoOverride={cargasAeropuertoFinales}
                     onSelectEnvio={handleSelectEnvio}
                     onSelectAeropuerto={handleSelectAeropuerto}
+                    umbralVerde={umbralVerde}
+                    umbralAmbar={umbralAmbar}
                   />
                 )}
                 {activeTab === 'simulacion' && (

@@ -100,8 +100,27 @@ function crearIconoAvion(color: string, angle: number): L.DivIcon {
   });
 }
 
-function crearIconoAeropuerto(collapsed: boolean): L.DivIcon {
-  const color = collapsed ? AIRPORT_COLLAPSE_RED : AIRPORT_BLUE;
+function crearIconoAeropuerto(
+  cargaActual: number,
+  capacidadMax: number,
+  umbralVerde: number,
+  umbralAmbar: number,
+  collapsed: boolean
+): L.DivIcon {
+  let color = '#065f46'; // Verde oscuro por defecto
+  if (capacidadMax > 0) {
+    const p = (cargaActual / capacidadMax) * 100;
+    if (p <= umbralVerde) {
+      color = '#065f46'; // Verde oscuro
+    } else if (p <= umbralAmbar) {
+      color = '#b45309'; // Ámbar oscuro
+    } else {
+      color = '#991b1b'; // Rojo oscuro
+    }
+  }
+  if (collapsed) {
+    color = '#991b1b'; // Forzar rojo oscuro si está colapsado
+  }
   
   // viewBox ajustado a 64x64 para que el centro del círculo (cx=32, cy=32) sea el centro real del lienzo
   const svg = encodeURIComponent(`
@@ -124,14 +143,21 @@ function crearIconoAeropuerto(collapsed: boolean): L.DivIcon {
 const AirportMarker: React.FC<{
   aeropuerto: AeropuertoDTO;
   cargaActual: number;
+  umbralVerde: number;
+  umbralAmbar: number;
   onSelectAeropuerto: (aeropuerto: AeropuertoDTO) => void;
 }> = React.memo(function AirportMarker({
   aeropuerto,
   cargaActual,
+  umbralVerde,
+  umbralAmbar,
   onSelectAeropuerto,
 }) {
   const collapsed = isAirportCollapsed(cargaActual, aeropuerto.capacidadMax);
-  const icon = useMemo(() => crearIconoAeropuerto(collapsed), [collapsed]);
+  const icon = useMemo(
+    () => crearIconoAeropuerto(cargaActual, aeropuerto.capacidadMax, umbralVerde, umbralAmbar, collapsed),
+    [cargaActual, aeropuerto.capacidadMax, umbralVerde, umbralAmbar, collapsed]
+  );
   const eventHandlers = useMemo(
     () => ({ click: () => onSelectAeropuerto(aeropuerto) }),
     [aeropuerto, onSelectAeropuerto]
@@ -343,6 +369,8 @@ export default function MapaRutas({
             key={a.codigo}
             aeropuerto={a}
             cargaActual={cargasAeropuertos[a.codigo] || 0}
+            umbralVerde={umbralVerde}
+            umbralAmbar={umbralAmbar}
             onSelectAeropuerto={onSelectAeropuerto}
           />
         ))}

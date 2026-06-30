@@ -11,6 +11,8 @@ interface SidebarInfoProps {
   cargasAeropuertoOverride?: Record<string, number> | null;
   onSelectEnvio: (e: RutaMuestra) => void;
   onSelectAeropuerto: (a: AeropuertoDTO) => void;
+  umbralVerde?: number;
+  umbralAmbar?: number;
 }
 
 type OrdenAero = 'codigo' | 'ciudad' | 'ocupacion_desc' | 'ocupacion_asc';
@@ -23,6 +25,8 @@ function SidebarInfo({
   cargasAeropuertoOverride,
   onSelectEnvio,
   onSelectAeropuerto,
+  umbralVerde = 30,
+  umbralAmbar = 80,
 }: SidebarInfoProps) {
   const [searchEnvios,     setSearchEnvios]     = useState('');
   const [searchAero,       setSearchAero]       = useState('');
@@ -126,13 +130,15 @@ function SidebarInfo({
       ?? calcularCargaAeropuertoActual(a.codigo, envios, simTiempoMinutos);
     const porcentaje = porcentajeOcupacion(cargaActual, a.capacidadMax);
 
-    const esColapso = cargaActual > a.capacidadMax;
-    const esAlto    = cargaActual > a.capacidadMax * 0.8;
+    const esColapso = cargaActual >= a.capacidadMax;
+    const esVerde   = porcentaje <= umbralVerde;
+    const esAmbar   = !esVerde && porcentaje <= umbralAmbar;
+    const esRojo    = !esVerde && !esAmbar;
 
-    const colorText  = esColapso ? 'text-red-400'   : esAlto ? 'text-amber-400'  : 'text-emerald-400';
-    const colorBarra = esColapso ? 'bg-red-500'      : esAlto ? 'bg-amber-500'   : 'bg-emerald-500';
-    const rowBorder  = esColapso ? 'border-red-700/40 bg-red-950/10'
-                     : esAlto   ? 'border-amber-700/40 bg-amber-950/10'
+    const colorText  = esColapso || esRojo ? 'text-red-400'   : esAmbar ? 'text-amber-400'  : 'text-emerald-400';
+    const colorBarra = esColapso || esRojo ? 'bg-red-500'      : esAmbar ? 'bg-amber-500'   : 'bg-emerald-500';
+    const rowBorder  = esColapso || esRojo ? 'border-red-700/40 bg-red-950/10'
+                     : esAmbar   ? 'border-amber-700/40 bg-amber-950/10'
                      :            'border-slate-700/50 bg-[#122340]';
 
     return (
@@ -349,7 +355,9 @@ export default React.memo(SidebarInfo, (prev, next) => {
     prev.aeropuertos     !== next.aeropuertos     ||
     prev.activeTab       !== next.activeTab       ||
     prev.onSelectEnvio   !== next.onSelectEnvio   ||
-    prev.onSelectAeropuerto !== next.onSelectAeropuerto
+    prev.onSelectAeropuerto !== next.onSelectAeropuerto ||
+    prev.umbralVerde     !== next.umbralVerde     ||
+    prev.umbralAmbar     !== next.umbralAmbar
   ) {
     return false;
   }
