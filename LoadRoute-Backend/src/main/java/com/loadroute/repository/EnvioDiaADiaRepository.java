@@ -25,4 +25,9 @@ public interface EnvioDiaADiaRepository extends JpaRepository<EnvioDiaADiaEntity
     @Transactional
     @Query("UPDATE EnvioDiaADiaEntity e SET e.rutaDefinida = true WHERE e.claveCompuesta IN :claves")
     void marcarComoProcesados(@Param("claves") Collection<String> claves);
+
+    @Modifying
+    @Transactional
+    @Query("UPDATE EnvioDiaADiaEntity e SET e.rutaDefinida = false")
+    void resetAllRutasDefinidas();
 }

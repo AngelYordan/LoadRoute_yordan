@@ -5,7 +5,7 @@ import ControlPanel from '@/components/ControlPanel';
 import AdminPanel from '@/components/AdminPanel';
 import { ColapsoDatos } from '@/components/ModalColapso';
 import { RutaResponse, RutaMuestra, AeropuertoDTO, TramoDTO, FiltrosAvionesMapa } from '@/types/rutas';
-import { verificarSaludBackend } from '@/services/ruteoService';
+import { verificarSaludBackend, cancelarVuelo as cancelarVueloApi, reactivarVuelo as reactivarVueloApi, obtenerVuelosCancelados, eliminarSimulacion } from '@/services/ruteoService';
 import { calcularUltimasCargasAeropuertos, calcularCargaAeropuertoActual } from '@/utils/capacidad';
 import { IconSettings } from '@/components/icons';
 import { useSimulationTimer } from '@/hooks/useSimulationTimer';
@@ -54,6 +54,20 @@ function formatTiempoReal(ms: number): string {
   return `${pad(minutes)}:${pad(seconds)}.${tenths}`;
 }
 
+function getDayOffset(fechaInicioRaw: string, fechaStr: string): number {
+  if (!fechaInicioRaw || !fechaStr) return -1;
+  const y1 = parseInt(fechaInicioRaw.slice(0, 4));
+  const m1 = parseInt(fechaInicioRaw.slice(4, 6)) - 1;
+  const d1 = parseInt(fechaInicioRaw.slice(6, 8));
+  const start = new Date(y1, m1, d1);
+  
+  const [y2, m2, d2] = fechaStr.split('-').map(Number);
+  const current = new Date(y2, m2 - 1, d2);
+  
+  const diffTime = Math.abs(current.getTime() - start.getTime());
+  return Math.round(diffTime / (1000 * 60 * 60 * 24));
+}
+
 // ── Helper: fecha de simulación ──
 function formatFechaSimulacion(fechaInicioRaw: string, simDia: number): string {
   if (!fechaInicioRaw || fechaInicioRaw.length < 8) return `Día ${simDia + 1}`;
@@ -92,6 +106,7 @@ function formatoHora(minutos: number): string {
 function combineChunks(chunks: RutaResponse[] | undefined): RutaResponse | null {
   if (!chunks || chunks.length === 0) return null;
   const base = { ...chunks[0] };
+  base.chunksCount = chunks.length;
   base.resultadoSA = base.resultadoSA ? { ...base.resultadoSA, rutasMuestra: [...base.resultadoSA.rutasMuestra] } : null;
   base.totalEnviosCargados = chunks.reduce((total, c) => total + (c.totalEnviosCargados || 0), 0);
 
@@ -147,6 +162,7 @@ export default function Home() {
   const fechaInicioUsuarioRef = useRef('');
   const fechaFinUsuarioRef = useRef('');
   const isFirstChunkRef = useRef(true);
+  const activeJobIdRef = useRef<string | null>(null);
 
   // 4. Umbrales de capacidad (Se quedan en la página porque los controla el Sidebar)
   const [umbralVerde, setUmbralVerde] = useState(30);
@@ -201,12 +217,68 @@ export default function Home() {
     return { carga: totalCarga, capacidad: totalCapacidad };
   }, [resultado, cargasAeropuertoFinales, rutasActivas, simTotalVisual]);
 
+  const [cancelacionesBD, setCancelacionesBD] = useState<{ id: number; vueloId: number; fecha: string }[]>([]);
+
+  const cargarCancelacionesBD = useCallback(async () => {
+    try {
+      const list = await obtenerVuelosCancelados();
+      setCancelacionesBD(list);
+    } catch (e) {
+      console.error("Error al cargar cancelaciones de BD", e);
+    }
+  }, []);
+
   useEffect(() => {
     // Verificar salud del backend al iniciar
     verificarSaludBackend();
-  }, []);
+    cargarCancelacionesBD();
+  }, [cargarCancelacionesBD]);
 
   const [filtrosAvionesMapa, setFiltrosAvionesMapa] = useState<FiltrosAvionesMapa>(FILTROS_AVIONES_INICIALES);
+  const [cancelacionesLocales, setCancelacionesLocales] = useState<Record<number, number[]>>({});
+
+  const cancelacionesBDMap = useMemo(() => {
+    const map: Record<number, number[]> = {};
+    if (!fechaInicioRaw) return map;
+    
+    cancelacionesBD.forEach(c => {
+      const dayOffset = getDayOffset(fechaInicioRaw, c.fecha);
+      if (dayOffset >= 0) {
+        if (!map[dayOffset]) map[dayOffset] = [];
+        if (!map[dayOffset].includes(c.vueloId)) {
+          map[dayOffset].push(c.vueloId);
+        }
+      }
+    });
+    return map;
+  }, [cancelacionesBD, fechaInicioRaw]);
+
+  const cancelacionesPorDiaCombinadas = useMemo(() => {
+    const isEscenario2 = resultado?.escenario === 2;
+    const base = isEscenario2 ? [] : (resultado?.cancelacionesPorDiaSA || []);
+    const merged = [...base];
+    
+    const addIdsToDay = (day: number, ids: number[]) => {
+      while (merged.length <= day) {
+        merged.push([]);
+      }
+      ids.forEach(id => {
+        if (!merged[day].includes(id)) {
+          merged[day] = [...merged[day], id];
+        }
+      });
+    };
+
+    Object.entries(cancelacionesBDMap).forEach(([dayStr, ids]) => {
+      addIdsToDay(parseInt(dayStr), ids);
+    });
+    
+    Object.entries(cancelacionesLocales).forEach(([dayStr, ids]) => {
+      addIdsToDay(parseInt(dayStr), ids);
+    });
+    
+    return merged;
+  }, [resultado?.escenario, resultado?.cancelacionesPorDiaSA, cancelacionesBDMap, cancelacionesLocales]);
 
   const inicializarFiltrosAvionesMapa = useCallback(() => {
     if (filtrosAvionesInicializadosRef.current) return;
@@ -223,6 +295,59 @@ export default function Home() {
     fechaFinUsuarioRef.current = fecha;
     setFechaFinRaw(fecha);
   }, []);
+
+  const handleCancelarVuelo = useCallback(async (vueloId: number, fecha: string) => {
+    await cancelarVueloApi(vueloId, fecha);
+    await cargarCancelacionesBD();
+    
+    if (fechaInicioRaw) {
+      const y1 = parseInt(fechaInicioRaw.slice(0, 4));
+      const m1 = parseInt(fechaInicioRaw.slice(4, 6)) - 1;
+      const d1 = parseInt(fechaInicioRaw.slice(6, 8));
+      const start = new Date(y1, m1, d1);
+      
+      const [y2, m2, d2] = fecha.split('-').map(Number);
+      const current = new Date(y2, m2 - 1, d2);
+      
+      const diffTime = Math.abs(current.getTime() - start.getTime());
+      const dayOffset = Math.round(diffTime / (1000 * 60 * 60 * 24));
+      
+      setCancelacionesLocales(prev => {
+        const next = { ...prev };
+        if (!next[dayOffset]) next[dayOffset] = [];
+        if (!next[dayOffset].includes(vueloId)) {
+          next[dayOffset] = [...next[dayOffset], vueloId];
+        }
+        return next;
+      });
+    }
+  }, [fechaInicioRaw, cargarCancelacionesBD]);
+
+  const handleReactivarVuelo = useCallback(async (vueloId: number, fecha: string) => {
+    await reactivarVueloApi(vueloId, fecha);
+    await cargarCancelacionesBD();
+    
+    if (fechaInicioRaw) {
+      const y1 = parseInt(fechaInicioRaw.slice(0, 4));
+      const m1 = parseInt(fechaInicioRaw.slice(4, 6)) - 1;
+      const d1 = parseInt(fechaInicioRaw.slice(6, 8));
+      const start = new Date(y1, m1, d1);
+      
+      const [y2, m2, d2] = fecha.split('-').map(Number);
+      const current = new Date(y2, m2 - 1, d2);
+      
+      const diffTime = Math.abs(current.getTime() - start.getTime());
+      const dayOffset = Math.round(diffTime / (1000 * 60 * 60 * 24));
+      
+      setCancelacionesLocales(prev => {
+        const next = { ...prev };
+        if (next[dayOffset]) {
+          next[dayOffset] = next[dayOffset].filter(id => id !== vueloId);
+        }
+        return next;
+      });
+    }
+  }, [fechaInicioRaw, cargarCancelacionesBD]);
 
   // ── Detección de colapso (Escenario 3) ──────────────────────────────────
   // Función auxiliar: calcula cargas de aeropuertos en el minuto actual usando
@@ -325,6 +450,10 @@ export default function Home() {
 
   // Acciones adaptadas usando los métodos del Custom Hook
   const handleReiniciar = () => {
+    if (activeJobIdRef.current) {
+      eliminarSimulacion(activeJobIdRef.current).catch(() => undefined);
+      activeJobIdRef.current = null;
+    }
     setResultado(null);
     resetTimerCompletamente(0); // <-- Limpia el estado del tiempo del hook
     setFechaInicioRaw('');
@@ -336,6 +465,8 @@ export default function Home() {
     setFiltrosAvionesMapa(FILTROS_AVIONES_INICIALES);
     setColapsoDatos(null);
     colapsoDetectadoRef.current = false;
+    setCancelacionesLocales({});
+    setCancelacionesBD([]);
   };
 
   const handleTabClick = useCallback((id: TabId) => {
@@ -365,9 +496,6 @@ export default function Home() {
   }, []);
 
   const handleSelectEnvio = useCallback((envio: RutaMuestra) => {
-    setActiveTab(null);
-    setVueloModal(null);
-    setAeroModal(null);
     setEnvioModal(envio);
   }, []);
 
@@ -422,6 +550,8 @@ export default function Home() {
               if (res) {
                 colapsoDetectadoRef.current = false;
                 setColapsoDatos(null);
+                setCancelacionesLocales({});
+                cargarCancelacionesBD();
                 setResultado(res);
                 isFirstChunkRef.current = false;
                 inicializarFiltrosAvionesMapa();
@@ -432,6 +562,7 @@ export default function Home() {
               }
             }}
             onProgressJob={(job) => {
+              activeJobIdRef.current = job.jobId;
               const res = combineChunks(job.chunks);
               if (res) {
                 if (isFirstChunkRef.current) {
@@ -508,6 +639,12 @@ export default function Home() {
       rutasActivas={rutasActivas}
       diasSimulados={diasSimulados}
       maxSimDia={maxSimDia}
+      
+      // Cancelaciones
+      cancelacionesPorDia={cancelacionesPorDiaCombinadas}
+      simTotalMinutos={simTotalMinutos}
+      onCancelarVuelo={handleCancelarVuelo}
+      onReactivarVuelo={handleReactivarVuelo}
       
       // Funciones / Handlers
       setIsPlaying={setIsPlaying}

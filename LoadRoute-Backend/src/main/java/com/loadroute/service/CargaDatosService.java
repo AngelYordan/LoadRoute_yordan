@@ -239,13 +239,15 @@ public class CargaDatosService {
             Aeropuerto origen = aeropuertosMap.get(entity.getOrigen().getCodigo());
             Aeropuerto destino = aeropuertosMap.get(entity.getDestino().getCodigo());
             if (origen != null && destino != null) {
-                vuelos.add(new Vuelo(
+                Vuelo v = new Vuelo(
                         origen,
                         destino,
                         entity.getHoraSalidaLocal(),
                         entity.getHoraLlegadaLocal(),
                         entity.getCapacidadMax()
-                ));
+                );
+                v.setId(entity.getId().intValue());
+                vuelos.add(v);
             }
         }
         return vuelos;
@@ -407,5 +409,10 @@ public class CargaDatosService {
     @Transactional
     public void limpiarEnviosDiaADia() {
         envioDiaADiaRepository.deleteAllInBatch();
+    }
+
+    @Transactional
+    public void resetAllRutasDefinidas() {
+        envioDiaADiaRepository.resetAllRutasDefinidas();
     }
 }

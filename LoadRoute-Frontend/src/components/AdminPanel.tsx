@@ -28,9 +28,10 @@ type AdminTab = 'aeropuertos' | 'vuelos' | 'enviosDiaADia';
 
 interface AdminPanelProps {
   escenario?: number;
+  onSelectEnvio?: (envioId: string) => void;
 }
 
-export default function AdminPanel({ escenario }: AdminPanelProps) {
+export default function AdminPanel({ escenario, onSelectEnvio }: AdminPanelProps) {
   const [activeTab, setActiveTab] = useState<AdminTab>(
     escenario === 2 ? 'enviosDiaADia' : 'aeropuertos'
   );
@@ -626,13 +627,10 @@ export default function AdminPanel({ escenario }: AdminPanelProps) {
               <div className="flex gap-1.5">
                 <button
                   onClick={() => {
-                    const now = new Date();
-                    const localIso = now.toISOString().slice(0, 16); // "YYYY-MM-DDTHH:mm"
                     setEnvioForm({
                       clienteId: '',
                       origenCodigo: '',
                       destinoCodigo: '',
-                      fechaCreacionLocal: localIso,
                       cantidadMaletas: 1,
                     });
                   }}
@@ -718,11 +716,7 @@ export default function AdminPanel({ escenario }: AdminPanelProps) {
                         ))}
                       </select>
                     </div>
-                    <div>
-                      <label className={labelClass}>Fecha / Hora Local</label>
-                      <input required type="datetime-local" className={inputClass} value={envioForm.fechaCreacionLocal} onChange={e => setEnvioForm({ ...envioForm, fechaCreacionLocal: e.target.value })} />
-                    </div>
-                    <div>
+                    <div className="col-span-2">
                       <label className={labelClass}>Cant. Maletas</label>
                       <input required type="number" min="1" className={inputClass} value={envioForm.cantidadMaletas} onChange={e => setEnvioForm({ ...envioForm, cantidadMaletas: parseInt(e.target.value) || 1 })} />
                     </div>
@@ -738,7 +732,15 @@ export default function AdminPanel({ escenario }: AdminPanelProps) {
                 <p className="text-slate-500 text-xs text-center py-8">Cargando...</p>
               ) : (
                 paginatedEnvios.map(e => (
-                  <div key={e.id} className="bg-[#122340] border border-slate-700/50 rounded-lg p-3 hover:border-rose-500/30 transition-all">
+                  <div
+                    key={e.id}
+                    onClick={() => {
+                      if (onSelectEnvio && e.claveCompuesta) {
+                        onSelectEnvio(e.claveCompuesta);
+                      }
+                    }}
+                    className="bg-[#122340] border border-slate-700/50 rounded-lg p-3 hover:border-rose-500/30 transition-all cursor-pointer"
+                  >
                     <div className="flex justify-between items-center">
                       <div>
                         <div className="flex items-center gap-2 mb-0.5">

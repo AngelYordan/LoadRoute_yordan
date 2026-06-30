@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { TramoDTO, RutaMuestra } from '@/types/rutas';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { TramoDTO, RutaMuestra, AeropuertoDTO } from '@/types/rutas';
 import { IconSearch } from '@/components/icons';
 
 type SortKey = 'none' | 'ocupacion_desc' | 'ocupacion_asc' | 'salida_asc' | 'llegada_asc' | 'origen_az' | 'destino_az';
@@ -14,6 +14,8 @@ interface SidebarVuelosProps {
   umbralAmbar?: number;
   onSelectVuelo?: (vuelo: TramoDTO) => void;
   selectedVuelo?: TramoDTO | null;
+  fechaInicioRaw?: string;
+  aeropuertos?: AeropuertoDTO[];
 }
 
 /** Calcula maletas cargadas en cada vuelo en el día seleccionado */
@@ -51,12 +53,46 @@ export default function SidebarVuelos({
   umbralAmbar = 70,
   onSelectVuelo,
   selectedVuelo,
+  fechaInicioRaw,
+  aeropuertos,
 }: SidebarVuelosProps) {
   const [selectedDia, setSelectedDia] = useState<number>(simDia);
   const [searchTerm,  setSearchTerm]  = useState('');
   const [sortKey,     setSortKey]     = useState<SortKey>('none');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize,    setPageSize]    = useState(10);
+  const [filtroEstado, setFiltroEstado] = useState<'todos' | 'cancelados' | 'operativos'>('todos');
+
+  const getFechaGmtLabel = useCallback((index: number) => {
+    if (!fechaInicioRaw || fechaInicioRaw.length < 8) return `Día ${index + 1}`;
+    const y = parseInt(fechaInicioRaw.slice(0, 4));
+    const m = parseInt(fechaInicioRaw.slice(4, 6)) - 1;
+    const d = parseInt(fechaInicioRaw.slice(6, 8));
+    const date = new Date(Date.UTC(y, m, d));
+    date.setUTCDate(date.getUTCDate() + index);
+    
+    const day = date.getUTCDate();
+    const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Set", "Oct", "Nov", "Dic"];
+    const month = monthNames[date.getUTCMonth()];
+    return `Día ${index + 1} (${day}-${month} GMT)`;
+  }, [fechaInicioRaw]);
+
+  const getLocalDayLabel = useCallback((diaOffset: number, minutosGMT: number, gmtOffset: number) => {
+    if (!fechaInicioRaw || fechaInicioRaw.length < 8) return '';
+    const y = parseInt(fechaInicioRaw.slice(0, 4));
+    const m = parseInt(fechaInicioRaw.slice(4, 6)) - 1;
+    const d = parseInt(fechaInicioRaw.slice(6, 8));
+    
+    const date = new Date(Date.UTC(y, m, d));
+    date.setUTCDate(date.getUTCDate() + diaOffset);
+    date.setUTCHours(0, minutosGMT, 0, 0);
+    date.setUTCHours(date.getUTCHours() + gmtOffset);
+    
+    const day = date.getUTCDate();
+    const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Set", "Oct", "Nov", "Dic"];
+    const month = monthNames[date.getUTCMonth()];
+    return ` (${day}-${month})`;
+  }, [fechaInicioRaw]);
 
   // Sincronizar selectedDia con simDia cuando avanza la simulación
   useEffect(() => {
@@ -66,7 +102,7 @@ export default function SidebarVuelos({
   // Resetear página cuando cambian los filtros
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, sortKey, selectedDia]);
+  }, [searchTerm, sortKey, selectedDia, filtroEstado]);
 
   // Ajustar cantidad de elementos por página según la altura de la pantalla
   useEffect(() => {
@@ -92,8 +128,8 @@ export default function SidebarVuelos({
     [rutasActivas, selectedDia]
   );
 
-  const filtered = useMemo(() => {
-    let result = vuelos.filter(v => {
+  const filteredBySearch = useMemo(() => {
+    return vuelos.filter(v => {
       if (!searchTerm) return true;
       const q = searchTerm.toLowerCase();
       return (
@@ -102,6 +138,23 @@ export default function SidebarVuelos({
         v.destino.toLowerCase().includes(q)
       );
     });
+  }, [vuelos, searchTerm]);
+
+  const totalCancelados = useMemo(() => {
+    return filteredBySearch.filter(v => cancelacionesActivas.has(v.vueloId)).length;
+  }, [filteredBySearch, cancelacionesActivas]);
+
+  const totalActivos = filteredBySearch.length - totalCancelados;
+
+  const filtered = useMemo(() => {
+    let result = filteredBySearch;
+
+    if (filtroEstado !== 'todos') {
+      result = result.filter(v => {
+        const isCancelled = cancelacionesActivas.has(v.vueloId);
+        return filtroEstado === 'cancelados' ? isCancelled : !isCancelled;
+      });
+    }
 
     if (sortKey !== 'none') {
       result = [...result].sort((a, b) => {
@@ -128,7 +181,7 @@ export default function SidebarVuelos({
     }
 
     return result;
-  }, [vuelos, searchTerm, sortKey, ocupacionPorVuelo]);
+  }, [filteredBySearch, filtroEstado, cancelacionesActivas, sortKey, ocupacionPorVuelo]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paginatedVuelos = useMemo(() => {
@@ -136,8 +189,8 @@ export default function SidebarVuelos({
     return filtered.slice(start, start + pageSize);
   }, [filtered, currentPage, pageSize]);
 
-  const cancelados = filtered.filter(v => cancelacionesActivas.has(v.vueloId)).length;
-  const activos    = filtered.length - cancelados;
+  const cancelados = totalCancelados;
+  const activos    = totalActivos;
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -153,7 +206,7 @@ export default function SidebarVuelos({
             className="bg-slate-800 text-slate-200 text-xs border border-slate-700 rounded px-2 py-1 outline-none focus:border-orange-500/50"
           >
             {Array.from({ length: maxDia + 1 }).map((_, i) => (
-              <option key={i} value={i}>Día {i + 1}</option>
+              <option key={i} value={i}>{getFechaGmtLabel(i)}</option>
             ))}
           </select>
         </div>
@@ -188,6 +241,40 @@ export default function SidebarVuelos({
           <option value="destino_az">Destino (A–Z)</option>
         </select>
 
+        {/* Filtros de Estado */}
+        <div className="flex gap-1.5 pt-1">
+          <button
+            onClick={() => setFiltroEstado('todos')}
+            className={`flex-1 py-1 text-[10px] font-bold rounded border transition-all ${
+              filtroEstado === 'todos'
+                ? 'bg-slate-700 bg-opacity-60 text-slate-100 border-slate-600'
+                : 'bg-transparent text-slate-400 border-slate-800/40 hover:text-slate-200'
+            }`}
+          >
+            Todos
+          </button>
+          <button
+            onClick={() => setFiltroEstado('operativos')}
+            className={`flex-1 py-1 text-[10px] font-bold rounded border transition-all ${
+              filtroEstado === 'operativos'
+                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                : 'bg-transparent text-slate-400 border-slate-800/40 hover:text-slate-200'
+            }`}
+          >
+            Operativos
+          </button>
+          <button
+            onClick={() => setFiltroEstado('cancelados')}
+            className={`flex-1 py-1 text-[10px] font-bold rounded border transition-all ${
+              filtroEstado === 'cancelados'
+                ? 'bg-red-500/20 text-red-300 border-red-500/30'
+                : 'bg-transparent text-slate-400 border-slate-800/40 hover:text-slate-200'
+            }`}
+          >
+            Cancelados
+          </button>
+        </div>
+
         {/* Stats */}
         <div className="flex justify-between text-[10px] px-0.5">
           <span className="text-slate-400">{activos} programados</span>
@@ -215,6 +302,18 @@ export default function SidebarVuelos({
           if (isSelected) {
             rowClass += ' ring-2 ring-orange-500 shadow-lg shadow-orange-500/20';
           }
+
+          const origenAero = aeropuertos?.find(a => a.codigo === v.origen);
+          const destinoAero = aeropuertos?.find(a => a.codigo === v.destino);
+          const gmtOrigen = origenAero?.gmt ?? 0;
+          const gmtDestino = destinoAero?.gmt ?? 0;
+
+          const localSalidaLabel = getLocalDayLabel(selectedDia, v.salidaMinutosGMT, gmtOrigen);
+          const localLlegadaLabel = getLocalDayLabel(
+            selectedDia + (v.llegadaMinutosGMT < v.salidaMinutosGMT ? 1 : 0),
+            v.llegadaMinutosGMT,
+            gmtDestino
+          );
 
           return (
             <div
@@ -283,8 +382,8 @@ export default function SidebarVuelos({
 
               {/* Horarios */}
               <div className="flex justify-between text-[10px] text-slate-300">
-                <span>Sale: {v.horaSalidaLocal}</span>
-                <span>Llega: {v.horaLlegadaLocal}</span>
+                <span>Sale: {v.horaSalidaLocal}{localSalidaLabel}</span>
+                <span>Llega: {v.horaLlegadaLocal}{localLlegadaLabel}</span>
               </div>
             </div>
           );

@@ -37,6 +37,7 @@ interface MapaRutasProps {
   modoMapa: ModoMapa;
   onModoMapa: (modo: ModoMapa) => void;
   filtrosAviones?: FiltrosAvionesMapa;
+  cancelacionesPorDia?: number[][];
 }
 
 // Color fijo para aeropuertos: azul del header en operación normal, rojo en colapso
@@ -188,6 +189,7 @@ export default function MapaRutas({
   umbralAmbar,
   modoMapa,
   filtrosAviones,
+  cancelacionesPorDia,
 }: MapaRutasProps) {
   const aeropuertos = resultado?.aeropuertos || [];
   const resultadoSA = resultado?.resultadoSA;
@@ -223,11 +225,12 @@ export default function MapaRutas({
 
   const simDia = Math.floor(simTiempoMinutos / 1440);
   const vuelosCanceladosHoy = useMemo(() => {
-    if (!resultado?.cancelacionesPorDiaSA || !resultado.vuelosMaestros) return [];
-    const ids = resultado.cancelacionesPorDiaSA[simDia] || [];
+    const listCancelaciones = cancelacionesPorDia || resultado?.cancelacionesPorDiaSA;
+    if (!listCancelaciones || !resultado?.vuelosMaestros) return [];
+    const ids = listCancelaciones[simDia] || [];
     const vuelos = ids.map(id => resultado.vuelosMaestros?.find(v => v.vueloId === id)).filter(Boolean);
     return vuelos;
-  }, [resultado?.cancelacionesPorDiaSA, resultado?.vuelosMaestros, simDia]);
+  }, [cancelacionesPorDia, resultado?.cancelacionesPorDiaSA, resultado?.vuelosMaestros, simDia]);
 
   const activeMasterPlanesToday = useMemo(() => {
     if (!resultado?.vuelosMaestros) return [];
@@ -258,11 +261,12 @@ export default function MapaRutas({
     if (!mostrarSA) return [];
     return activeMasterPlanesToday.filter(v => {
       if (activePlanesSAKeys.has(`${v.vueloId}-${v.diaOffset}`)) return false;
-      const ids = resultado?.cancelacionesPorDiaSA?.[v.diaOffset];
+      const listCancelaciones = cancelacionesPorDia || resultado?.cancelacionesPorDiaSA;
+      const ids = listCancelaciones?.[v.diaOffset];
       if (ids && ids.includes(v.vueloId)) return false;
       return true;
     });
-  }, [mostrarSA, activeMasterPlanesToday, activePlanesSAKeys, resultado?.cancelacionesPorDiaSA]);
+  }, [mostrarSA, activeMasterPlanesToday, activePlanesSAKeys, cancelacionesPorDia, resultado?.cancelacionesPorDiaSA]);
 
   const emptyPlanesSAFiltered = useMemo(() => {
     return filtrarAvionesPorAeropuerto(emptyPlanesSA, filtrosAviones);

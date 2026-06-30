@@ -22,6 +22,7 @@ public class Envio {
     /** Hora LOCAL en el aeropuerto de origen. */
     private LocalDateTime  fechaHoraRecepcion;
     private int            cantidadMaletas;
+    private LocalDateTime  customDeadlineGMT;
 
     public Envio() {}
 
@@ -46,6 +47,9 @@ public class Envio {
     }
 
     public LocalDateTime getDeadlineGMT() {
+        if (customDeadlineGMT != null) {
+            return customDeadlineGMT;
+        }
         return getRecepcionGMT().plusHours(getSlaHoras());
     }
 
@@ -64,6 +68,7 @@ public class Envio {
     public void setDestino(Aeropuerto destino)               { this.destino = destino; }
     public void setFechaHoraRecepcion(LocalDateTime f)       { this.fechaHoraRecepcion = f; }
     public void setCantidadMaletas(int cantidadMaletas)      { this.cantidadMaletas = cantidadMaletas; }
+    public void setCustomDeadlineGMT(LocalDateTime d)        { this.customDeadlineGMT = d; }
 
     @Override
     public String toString() {

@@ -165,3 +165,35 @@ export async function verificarSaludBackend(): Promise<boolean> {
     return false;
   }
 }
+
+export async function cancelarVuelo(vueloId: number, fecha: string): Promise<string> {
+  const params = new URLSearchParams({ fecha });
+  const response = await fetch(`${API_ENDPOINTS.VUELOS}/${vueloId}/cancelar?${params.toString()}`, {
+    method: 'POST'
+  });
+  if (!response.ok) {
+    const msg = await response.text();
+    throw new Error(msg || `Error al cancelar el vuelo: ${response.status}`);
+  }
+  return response.text();
+}
+
+export async function reactivarVuelo(vueloId: number, fecha: string): Promise<string> {
+  const params = new URLSearchParams({ fecha });
+  const response = await fetch(`${API_ENDPOINTS.VUELOS}/${vueloId}/reactivar?${params.toString()}`, {
+    method: 'POST'
+  });
+  if (!response.ok) {
+    const msg = await response.text();
+    throw new Error(msg || `Error al reactivar el vuelo: ${response.status}`);
+  }
+  return response.text();
+}
+
+export async function obtenerVuelosCancelados(): Promise<{ id: number; vueloId: number; fecha: string }[]> {
+  const response = await fetch(`${API_ENDPOINTS.VUELOS}/cancelados`);
+  if (!response.ok) {
+    throw new Error(`Error al obtener vuelos cancelados: ${response.status}`);
+  }
+  return response.json();
+}

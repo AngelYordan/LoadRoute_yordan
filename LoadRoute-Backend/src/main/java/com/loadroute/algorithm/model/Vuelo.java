@@ -21,7 +21,7 @@ public class Vuelo {
 
     private static final AtomicInteger CONTADOR = new AtomicInteger(0);
 
-    private final int     id;
+    private int     id;
     private Aeropuerto    origen;
     private Aeropuerto    destino;
     private LocalTime     horaSalidaLocal;
@@ -117,6 +117,7 @@ public class Vuelo {
     // ── Getters / Setters ────────────────────────────────────────────────────
 
     public int          getId()                 { return id; }
+    public void         setId(int id)           { this.id = id; }
     public Aeropuerto   getOrigen()             { return origen; }
     public Aeropuerto   getDestino()            { return destino; }
     public LocalTime    getHoraSalidaLocal()    { return horaSalidaLocal; }

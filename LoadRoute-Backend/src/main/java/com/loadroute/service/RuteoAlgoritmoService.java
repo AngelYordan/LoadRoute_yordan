@@ -21,6 +21,9 @@ import java.util.*;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
+import com.loadroute.repository.VueloCanceladoRepository;
+import com.loadroute.entity.VueloCanceladoEntity;
+
 /**
  * Servicio principal de ruteo de Tasf.B2B.
  * Todos los escenarios usan Simulated Annealing (SA).
@@ -31,9 +34,12 @@ public class RuteoAlgoritmoService {
     private static final Logger LOG = Logger.getLogger(RuteoAlgoritmoService.class.getName());
 
     private final CargaDatosService cargaDatosService;
+    private final VueloCanceladoRepository vueloCanceladoRepository;
 
-    public RuteoAlgoritmoService(CargaDatosService cargaDatosService) {
+    public RuteoAlgoritmoService(CargaDatosService cargaDatosService,
+            VueloCanceladoRepository vueloCanceladoRepository) {
         this.cargaDatosService = cargaDatosService;
+        this.vueloCanceladoRepository = vueloCanceladoRepository;
     }
 
     public interface SimulacionIterator {
@@ -44,8 +50,12 @@ public class RuteoAlgoritmoService {
         boolean hasColapsado();
 
         String getMensajeColapso();
+
         int getSa();
+
         int getK();
+
+        LocalDateTime getCurrentTime();
     }
 
     @FunctionalInterface
@@ -91,10 +101,10 @@ public class RuteoAlgoritmoService {
         }
 
         if (escenario == 1) {
-            return new ParametrosSimulacion(1, 48);
+            return new ParametrosSimulacion(1, 80);
         }
 
-        return new ParametrosSimulacion(1, 48);
+        return new ParametrosSimulacion(1, 80);
     }
 
     private static final int MAX_RUTAS_MUESTRA = 10_000;
@@ -135,6 +145,10 @@ public class RuteoAlgoritmoService {
         report(progress, 8, "Cargando datos...");
         LOG.info("Cargando datos para el algoritmo...");
 
+        if (escenario == 2 || escenario == 3) {
+            cargaDatosService.resetAllRutasDefinidas();
+        }
+
         Map<String, Aeropuerto> aeropuertos;
         if (aeropuertosIS != null) {
             aeropuertos = Parsers.parsearAeropuertos(aeropuertosIS);
@@ -161,13 +175,15 @@ public class RuteoAlgoritmoService {
 
         Map<String, Envio> enviosEnMemoria = null;
 
-        if (enviosFiles != null && !enviosFiles.isEmpty() && !(enviosFiles.size() == 1 && enviosFiles.get(0).isEmpty())) {
+        if (enviosFiles != null && !enviosFiles.isEmpty()
+                && !(enviosFiles.size() == 1 && enviosFiles.get(0).isEmpty())) {
             enviosEnMemoria = new LinkedHashMap<>();
             LocalDateTime inicioFiltro = fechaInicio != null ? inicioReal : null;
             LocalDateTime finFiltro = (escenario == 2 || escenario == 3) ? null : (fechaFin != null ? finReal : null);
             for (MultipartFile file : enviosFiles) {
                 String filename = file.getOriginalFilename() != null ? file.getOriginalFilename() : "_envios_XXXX_.txt";
-                enviosEnMemoria.putAll(Parsers.parsearEnvios(file.getInputStream(), filename, aeropuertos, 0, inicioFiltro, finFiltro));
+                enviosEnMemoria.putAll(Parsers.parsearEnvios(file.getInputStream(), filename, aeropuertos, 0,
+                        inicioFiltro, finFiltro));
             }
         }
 
@@ -190,7 +206,8 @@ public class RuteoAlgoritmoService {
         int scMinutos = paramsSim.getScMinutos();
 
         report(progress, 98, "Preparando iterador para la simulación...");
-        return new SimulacionUnificadaIterator(enviosEnMemoria, aeropuertos, vuelos, response, progress, inicioReal, finReal, scMinutos);
+        return new SimulacionUnificadaIterator(enviosEnMemoria, aeropuertos, vuelos, response, progress, inicioReal,
+                finReal, scMinutos);
     }
 
     private void report(ProgressReporter progress, int pct, String message) {
@@ -198,14 +215,15 @@ public class RuteoAlgoritmoService {
             progress.update(pct, message);
     }
 
-    // AJUSTE: Agregamos el parámetro escenario para proteger el backlog del Escenario 1
+    // AJUSTE: Agregamos el parámetro escenario para proteger el backlog del
+    // Escenario 1
     private void retirarEnviosProcesados(Map<String, Envio> pendientes, SolucionEstado sol, int escenario) {
         for (String id : sol.getIdsAsignados())
             pendientes.remove(id);
         for (String id : sol.getIdsNoAceptados())
             pendientes.remove(id);
-        
-        // Si es Escenario 1, NO removemos los envíos sin ruta. 
+
+        // Si es Escenario 1, NO removemos los envíos sin ruta.
         // Se quedan en el almacén (backlog) para el siguiente lote.
         if (escenario != 1) {
             for (String id : sol.getEnviosSinRuta())
@@ -327,6 +345,8 @@ public class RuteoAlgoritmoService {
 
         private final Map<String, Envio> enviosEnMemoria;
         private final Map<String, Aeropuerto> aeropuertosMap;
+        private final Map<String, List<Vuelo>> rutasAsignadasGlobales = new LinkedHashMap<>();
+        private final Map<String, Envio> enviosProcesadosOriginales = new HashMap<>();
 
         private LocalDateTime currentLoteInicio;
         private int loteCount = 0;
@@ -360,7 +380,8 @@ public class RuteoAlgoritmoService {
 
         @Override
         public boolean hasNext() {
-            if (colapsado) return false;
+            if (colapsado)
+                return false;
             if (baseResponse.getEscenario() == 1) {
                 return currentLoteInicio.isBefore(fechaFinRango);
             }
@@ -379,9 +400,96 @@ public class RuteoAlgoritmoService {
 
         @Override
         public RutaResponseDTO nextChunk() {
-            if (!hasNext()) return null;
+            if (!hasNext())
+                return null;
             LocalDateTime loteFin = currentLoteInicio.plusMinutes(scMinutos);
-            
+
+            // 1. Fetch cancellations from DB and map to Set<String>
+            List<VueloCanceladoEntity> dbCancellations = vueloCanceladoRepository.findAll();
+            Set<String> vuelosCanceladosKeys = dbCancellations.stream()
+                    .map(c -> c.getVuelo().getId() + ":" + c.getFecha().toString())
+                    .collect(Collectors.toSet());
+
+            // 2. Identify and re-route affected shipments
+            List<String> enviosParaReencaminar = new ArrayList<>();
+            for (Map.Entry<String, List<Vuelo>> entry : rutasAsignadasGlobales.entrySet()) {
+                String envioId = entry.getKey();
+                List<Vuelo> ruta = entry.getValue();
+
+                Envio envio = enviosEnMemoria != null ? enviosEnMemoria.get(envioId)
+                        : enviosProcesadosOriginales.get(envioId);
+                if (envio == null)
+                    continue;
+
+                LocalDateTime t = envio.getRecepcionGMT();
+                for (int i = 0; i < ruta.size(); i++) {
+                    Vuelo v = ruta.get(i);
+                    LocalDateTime proximaSalida = v.getProximaSalidaGMT(t, RedLogistica.BUFFER_CONEXION);
+                    LocalDate fechaLocal = proximaSalida.plusHours(v.getOrigen().getGmt()).toLocalDate();
+                    String key = v.getId() + ":" + fechaLocal.toString();
+
+                    if (vuelosCanceladosKeys.contains(key)) {
+                        enviosParaReencaminar.add(envioId);
+                        break;
+                    }
+                    t = v.getLlegadaGMT(proximaSalida);
+                }
+            }
+
+            for (String envioId : enviosParaReencaminar) {
+                List<Vuelo> ruta = rutasAsignadasGlobales.get(envioId);
+                Envio envio = enviosEnMemoria != null ? enviosEnMemoria.get(envioId)
+                        : enviosProcesadosOriginales.get(envioId);
+                if (ruta == null || envio == null)
+                    continue;
+
+                // Release capacity from all legs of the old route
+                for (Vuelo v : ruta) {
+                    v.liberar(envio.getCantidadMaletas());
+                }
+
+                // Find K index where the cancelled flight is
+                int K = -1;
+                LocalDateTime t = envio.getRecepcionGMT();
+                LocalDateTime llegadaAnterior = envio.getRecepcionGMT();
+                for (int i = 0; i < ruta.size(); i++) {
+                    Vuelo v = ruta.get(i);
+                    LocalDateTime proximaSalida = v.getProximaSalidaGMT(t, RedLogistica.BUFFER_CONEXION);
+                    LocalDate fechaLocal = proximaSalida.plusHours(v.getOrigen().getGmt()).toLocalDate();
+                    String key = v.getId() + ":" + fechaLocal.toString();
+
+                    if (vuelosCanceladosKeys.contains(key)) {
+                        K = i;
+                        break;
+                    }
+                    llegadaAnterior = v.getLlegadaGMT(proximaSalida);
+                    t = llegadaAnterior;
+                }
+
+                if (K != -1) {
+                    Vuelo vueloCancelado = ruta.get(K);
+                    Aeropuerto strandedAirport = vueloCancelado.getOrigen();
+
+                    Envio envioCopia = new Envio(
+                            envio.getId(),
+                            envio.getIdCliente(),
+                            strandedAirport,
+                            envio.getDestino(),
+                            llegadaAnterior,
+                            envio.getCantidadMaletas());
+                    envioCopia.setCustomDeadlineGMT(envio.getDeadlineGMT());
+
+                    pendientesSA.put(envioId, envioCopia);
+
+                    if (enviosEnMemoria != null) {
+                        enviosEnMemoria.put(envioId, envioCopia);
+                    } else {
+                        enviosProcesadosOriginales.put(envioId, envioCopia);
+                    }
+                }
+                rutasAsignadasGlobales.remove(envioId);
+            }
+
             Map<String, Envio> nuevosEnvios = new LinkedHashMap<>();
             if (baseResponse.getEscenario() == 2) {
                 nuevosEnvios = cargaDatosService.obtenerEnviosDiaADiaPendientes(aeropuertosMap, loteFin);
@@ -398,10 +506,10 @@ public class RuteoAlgoritmoService {
                     }
                 } else {
                     nuevosEnvios = cargaDatosService.obtenerEnviosDeBDComoModelosEnRango(
-                        aeropuertosMap, currentLoteInicio, loteFin.minusSeconds(1));
+                            aeropuertosMap, currentLoteInicio, loteFin.minusSeconds(1));
                 }
             }
-            
+
             pendientesSA.putAll(nuevosEnvios);
             enviosAcumuladosTotales += nuevosEnvios.size();
             loteCount++;
@@ -413,8 +521,9 @@ public class RuteoAlgoritmoService {
                     .setTemperaturaInicial(1_000.0)
                     .setTemperaturaMinima(1.0)
                     .setTiempoPlanificacion(loteFin)
-                    .setPeriodoString(formatoLote(currentLoteInicio, loteFin));
-            
+                    .setPeriodoString(formatoLote(currentLoteInicio, loteFin))
+                    .setVuelosCanceladosKeys(vuelosCanceladosKeys);
+
             int pct = 35;
             if (baseResponse.getEscenario() == 1) {
                 long minsPassed = ChronoUnit.MINUTES.between(fechaInicioRango, currentLoteInicio);
@@ -422,21 +531,47 @@ public class RuteoAlgoritmoService {
                 pct = Math.min(95, Math.max(35, pct));
             }
             report(progress, pct, "SA lote: " + formatoLote(currentLoteInicio, loteFin));
-            
+
             long t0 = System.currentTimeMillis();
             SolucionEstado solSA = sa.optimizar(pendientesSA);
             long msSA = System.currentTimeMillis() - t0;
 
+            // Record global assignments
+            for (Map.Entry<String, List<Vuelo>> e : solSA.getAsignaciones().entrySet()) {
+                String envioId = e.getKey();
+                List<Vuelo> ruta = e.getValue();
+                if (!ruta.isEmpty()) {
+                    rutasAsignadasGlobales.put(envioId, ruta);
+                    if (enviosEnMemoria == null) {
+                        Envio original = pendientesSA.get(envioId);
+                        if (original != null) {
+                            enviosProcesadosOriginales.put(envioId, original);
+                        }
+                    }
+                }
+            }
+
+            List<Integer> currentCancelledIds = new ArrayList<>();
+            for (VueloCanceladoEntity c : dbCancellations) {
+                if (c.getFecha().equals(currentLoteInicio.toLocalDate())) {
+                    currentCancelledIds.add(c.getVuelo().getId().intValue());
+                }
+            }
+
             String nombreAlgoritmo;
-            if (baseResponse.getEscenario() == 3) nombreAlgoritmo = "SA (Colapso)";
-            else if (baseResponse.getEscenario() == 2) nombreAlgoritmo = "SA (Día a Día)";
-            else nombreAlgoritmo = "SA (Periodo)";
+            if (baseResponse.getEscenario() == 3)
+                nombreAlgoritmo = "SA (Colapso)";
+            else if (baseResponse.getEscenario() == 2)
+                nombreAlgoritmo = "SA (Día a Día)";
+            else
+                nombreAlgoritmo = "SA (Periodo)";
 
             chunk.setResultadoSA(buildResultado(nombreAlgoritmo, sa.getCostoInicial(), sa.getCostoFinal(),
                     sa.getMejoraRelativa(), sa.getIteraciones(), msSA, solSA, pendientesSA,
-                    Collections.emptyList(), reservasSA, loteFin, fechaInicioRangoDia));
+                    currentCancelledIds, reservasSA, loteFin, fechaInicioRangoDia));
 
-            // AJUSTE: Solo colapsamos en Escenario 3 (El Escenario 1 continúa operando aunque haya varados)
+            // AJUSTE: Solo colapsamos en Escenario 3 (El Escenario 1 continúa operando
+            // aunque haya varados)
             if (!solSA.getEnviosSinRuta().isEmpty() && baseResponse.getEscenario() == 3) {
                 colapsado = true;
                 mensajeColapso = "Algoritmo colapso: " + solSA.getEnviosSinRuta().size()
@@ -444,7 +579,8 @@ public class RuteoAlgoritmoService {
                 chunk.getResultadoSA().setMensajeColapso(mensajeColapso);
             }
 
-            // AJUSTE: Pasamos el escenario para que retireEnviosProcesados pueda proteger el backlog del esc. 1
+            // AJUSTE: Pasamos el escenario para que retireEnviosProcesados pueda proteger
+            // el backlog del esc. 1
             retirarEnviosProcesados(pendientesSA, solSA, baseResponse.getEscenario());
 
             if (isFirst) {
@@ -454,7 +590,8 @@ public class RuteoAlgoritmoService {
 
             currentLoteInicio = loteFin;
 
-            if (progress != null) progress.onChunk(chunk);
+            if (progress != null)
+                progress.onChunk(chunk);
             return chunk;
         }
 
@@ -467,9 +604,12 @@ public class RuteoAlgoritmoService {
         public int getK() {
             return baseResponse.getK();
         }
+
+        @Override
+        public LocalDateTime getCurrentTime() {
+            return currentLoteInicio;
+        }
     }
-
-
 
     // ── MAPEO A DTO ───────────────────────────────────────────────────────────
     private ResultadoAlgoritmo buildResultado(String nombre,
