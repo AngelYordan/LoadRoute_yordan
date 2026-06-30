@@ -101,8 +101,8 @@ public class VueloController {
         LocalDateTime departureGMT = departureLocal.minusHours(vuelo.getOrigen().getGmt());
         
         long minutesToDeparture = java.time.Duration.between(currentTime, departureGMT).toMinutes();
-        if (minutesToDeparture < 10) {
-            return ResponseEntity.badRequest().body("No se puede cancelar el vuelo. Ya está en el aire o falta menos de 10 minutos para su salida.");
+        if (minutesToDeparture < 60) {
+            return ResponseEntity.badRequest().body("No se puede cancelar el vuelo. Ya está en el aire o falta menos de 1 hora para su salida.");
         }
         
         if (!vueloCanceladoRepository.existsByVueloIdAndFecha(id, cancellationDate)) {
